@@ -11,6 +11,7 @@ export async function POST(req: Request){
         }
 
         const driverId = session.user.id;
+        console.log("SESSION DRIVER ID:", driverId);
         const {lat, lng, speed} = await req.json();
 
         if(lat === undefined || lng === undefined){
@@ -28,14 +29,20 @@ export async function POST(req: Request){
         const busId = busResult.rows[0].id;
         
         await pool.query(
-            `SELECT INTO bus_locations (bus_id, location, speed, updated_at)
-            VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326), $4, NOW())
-            ON CONFLICT (bus_id)
-            DO UPDATE SET
-                location = EXCLUDED.location
-                speed = EXCLUDED.speed
-                updated_at = NOW()`, [busId, lat, lng, speed || 0]
-        );
+  `INSERT INTO bus_locations (bus_id, location, speed, updated_at)
+   VALUES (
+      $1,
+      ST_SetSRID(ST_MakePoint($3, $2), 4326),
+      $4,
+      NOW()
+   )
+   ON CONFLICT (bus_id)
+   DO UPDATE SET
+      location = EXCLUDED.location,
+      speed = EXCLUDED.speed,
+      updated_at = NOW()`,
+  [busId, lat, lng, speed || 0]
+);
 
         return NextResponse.json({message: "Location Updated"});
     } catch (error: any) {

@@ -18,6 +18,8 @@ export async function GET() {
   students.name AS student_name,
   buses.id AS bus_id,
   stops.name AS stop_name,
+  ST_Y(stops.location::geometry) AS stop_lat,
+  ST_X(stops.location::geometry) AS stop_lng,
   users.name AS driver_name
 FROM students
 JOIN buses ON students.bus_id = buses.id
