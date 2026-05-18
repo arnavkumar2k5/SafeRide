@@ -15,6 +15,15 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
 });
 
+const schoolIcon = new L.Icon({
+
+  iconUrl:
+    "https://cdn-icons-png.flaticon.com/512/167/167707.png",
+
+  iconSize: [40, 40],
+
+});
+
 import {
   MapContainer,
   TileLayer,
@@ -31,16 +40,58 @@ type Props = {
   driverName?: string;
   stopLat?: number;
   stopLng?: number;
+  school: {
+  latitude: number;
+  longitude: number;
+} | null;
 };
 
-function RecenterMap({ lat, lng }: { lat: number; lng: number }) {
+
+function FitAllMarkers({
+  lat,
+  lng,
+  stopLat,
+  stopLng,
+  school,
+}: any) {
+
   const map = useMap();
 
   useEffect(() => {
-    map.flyTo([lat, lng], 15, {
-      duration: 2,
-    });
-  }, [lat, lng, map]);
+
+    const bounds: [number, number][] = [];
+
+    bounds.push([lat, lng]);
+
+    if (
+      stopLat !== undefined &&
+      stopLng !== undefined
+    ) {
+
+      bounds.push([
+        stopLat,
+        stopLng,
+      ]);
+    }
+
+    if (school) {
+
+      bounds.push([
+        school.latitude,
+        school.longitude,
+      ]);
+    }
+
+    map.fitBounds(bounds);
+
+  }, [
+    lat,
+    lng,
+    stopLat,
+    stopLng,
+    school,
+    map,
+  ]);
 
   return null;
 }
@@ -52,6 +103,7 @@ export default function Map({
   driverName,
   stopLat,
   stopLng,
+  school,
 }: Props) {
   const markerRef = useRef<L.Marker>(null);
 
@@ -114,13 +166,38 @@ export default function Map({
       zoom={13}
       style={{ height: "100%", width: "100%" }}
     >
-      <RecenterMap lat={lat} lng={lng} />
+      <FitAllMarkers
+  lat={lat}
+  lng={lng}
+  stopLat={stopLat}
+  stopLng={stopLng}
+  school={school}
+/>
 
       <TileLayer
         attribution="© OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <Polyline positions={routePositions} />
+
+      {school && (
+
+  <Marker
+  icon={schoolIcon}
+
+  position={[
+    school.latitude,
+    school.longitude,
+  ]}
+>
+
+    <Popup>
+      🏫 School
+    </Popup>
+
+  </Marker>
+
+)}
 
       {/* BUS */}
       <Marker ref={markerRef} position={[lat, lng]}>

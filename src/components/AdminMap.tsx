@@ -2,12 +2,15 @@
 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useEffect } from "react";
 
 import {
   MapContainer,
   TileLayer,
   Marker,
   Popup,
+  Polyline,
+  useMap
 } from "react-leaflet";
 
 delete (L.Icon.Default.prototype as any)
@@ -24,6 +27,14 @@ L.Icon.Default.mergeOptions({
     "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
 });
 
+const schoolIcon = new L.Icon({
+
+  iconUrl:
+    "https://cdn-icons-png.flaticon.com/512/167/167707.png",
+
+  iconSize: [40, 40],
+});
+
 type Bus = {
   bus_id: string;
   driver_name: string;
@@ -33,10 +44,51 @@ type Bus = {
 
 type Props = {
   buses: Bus[];
+  tripHistory?: [number, number][];
+  replayPosition?: [
+    number,
+    number
+  ] | null;
+  school: {
+  latitude: number;
+  longitude: number;
+} | null;
 };
+
+function FitBounds({
+  tripHistory,
+}: {
+  tripHistory: [
+    number,
+    number
+  ][];
+}) {
+
+  const map = useMap();
+
+  useEffect(() => {
+
+    if (
+      tripHistory.length > 0
+    ) {
+
+      map.fitBounds(
+        tripHistory
+      );
+    }
+
+  }, [
+    map,
+    tripHistory
+  ]);
+
+  return null;
+}
 
 export default function AdminMap({
   buses,
+  tripHistory,
+  replayPosition, school,
 }: Props) {
 
   return (
@@ -54,6 +106,29 @@ export default function AdminMap({
         attribution="© OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      {school && (
+
+  <Marker
+    icon={schoolIcon}
+
+    position={[
+      school.latitude,
+      school.longitude,
+    ]}
+  >
+
+    <Popup>
+      🏫 School
+    </Popup>
+
+  </Marker>
+
+)}
+
+      {tripHistory && tripHistory.length > 0 && (
+        <FitBounds tripHistory={tripHistory} />
+      )}
 
       {buses
   .filter(
@@ -88,6 +163,34 @@ export default function AdminMap({
     </Marker>
 
 ))}
+
+{tripHistory &&
+  tripHistory.length > 0 && (
+
+  <Polyline
+  positions={tripHistory}
+
+  color="red"
+
+  weight={6}
+/>
+)}
+
+{replayPosition && (
+
+  <Marker
+    position={
+      replayPosition
+    }
+  >
+
+    <Popup>
+      🎥 Replay Bus
+    </Popup>
+
+  </Marker>
+
+)}
 
     </MapContainer>
   );

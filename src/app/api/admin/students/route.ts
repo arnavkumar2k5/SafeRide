@@ -10,6 +10,9 @@ export async function GET() {
                 students.id,
                 students.name AS student_name,
 
+                students.parent_id,
+                students.stop_id,
+
                 users.name AS parent_name,
                 users.email AS parent_email,
 

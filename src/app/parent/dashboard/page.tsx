@@ -34,8 +34,23 @@ export default function ParentDashboard() {
     status: string;
   } | null>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [school, setSchool] = useState<any>(null);
+
+  const showNotification = (title: string, body: string) => {
+    if (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "granted"
+    ) {
+      new Notification(title, { body });
+    }
+  };
 
   useEffect(() => {
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+
     const fetchData = async () => {
       try {
         const res = await fetch("/api/parent/me");
@@ -89,6 +104,12 @@ export default function ParentDashboard() {
                 },
               );
 
+              const schoolRes = await fetch("/api/admin/school");
+
+              const schoolJson = await schoolRes.json();
+
+              setSchool(schoolJson);
+
               const routeData = await res.json();
 
               const summary = routeData.routes[0].summary;
@@ -100,7 +121,6 @@ export default function ParentDashboard() {
               });
 
               const distance = summary.distance;
-
               if (distance <= 50) {
                 setBusArrived(true);
                 setBusNear(false);
@@ -118,17 +138,11 @@ export default function ParentDashboard() {
         } else {
           setError("No bus ID found");
         }
-        const historyRes =
-  await fetch(
-    "/api/parent/history"
-  );
+        const historyRes = await fetch("/api/parent/history");
 
-const historyData =
-  await historyRes.json();
+        const historyData = await historyRes.json();
 
-setHistory(
-  historyData.history
-);
+        setHistory(historyData.history);
         setLoading(false);
       } catch (err: any) {
         console.error("Fetch error:", err);
@@ -144,7 +158,7 @@ setHistory(
 
       setLocation({ lat: liveData.lat, lng: liveData.lng });
 
-      if (data?.stop_lat !== undefined && data?.stop_lng !== undefined) {
+      if (school && data?.stop_lat !== undefined && data?.stop_lng !== undefined) {
         try {
           const res = await fetch(
             "https://api.openrouteservice.org/v2/directions/driving-car",
@@ -159,7 +173,8 @@ setHistory(
 
               body: JSON.stringify({
                 coordinates: [
-                  [liveData.lng, liveData.lat],
+                  [school!.longitude, school!.latitude],
+
                   [data.stop_lng, data.stop_lat],
                 ],
               }),
@@ -193,28 +208,43 @@ setHistory(
       }
     });
 
+    socket.on(
+      "bus-near-stop",
+
+      (data) => {
+        console.log("Bus Near Stop:", data);
+
+        showNotification(
+          "Bus Near Stop",
+
+          `🚌 Bus is near ${data.stopName}`,
+        );
+      },
+    );
     socket.on("student-status-update", (liveData) => {
       console.log("Student Status:", liveData);
+      showNotification(
+        "Student Update",
 
+        `${liveData.studentName} ${liveData.status}`,
+      );
       setStudentNotification({
         name: liveData.studentName,
         status: liveData.status,
       });
       setHistory((prev) => [
+        {
+          status: liveData.status,
 
-  {
-    status: liveData.status,
+          updated_at: new Date(),
+        },
 
-    updated_at:
-      new Date(),
-  },
-
-  ...prev,
-]);
+        ...prev,
+      ]);
     });
     return () => {
       socket.off("bus-location-update");
-
+      socket.off("bus-near-stop");
       socket.off("student-status-update");
     };
   }, []);
@@ -250,7 +280,7 @@ setHistory(
           </p>
         )}
         {eta && (
-          <div className="text-yellow-400">
+          <div className="text-yellow-600">
             <p>
               <strong>Distance:</strong> {eta.distance}km
             </p>
@@ -313,83 +343,61 @@ setHistory(
           driverName={data?.driver_name}
           stopLat={data?.stop_lat}
           stopLng={data?.stop_lng}
+          school={school}
         />
       </div>
       <div
-  className="
+        className="
     mt-6
     bg-white
     p-4
     rounded
     shadow
   "
->
-
-  <h2
-    className="
+      >
+        <h2
+          className="
       text-2xl
       font-bold
       mb-4
     "
-  >
-    Attendance History
-  </h2>
-
-  <div
-    className="
-      space-y-3
-    "
-  >
-
-    {history.map(
-      (
-        item,
-        index
-      ) => (
+        >
+          Attendance History
+        </h2>
 
         <div
-          key={index}
-
           className="
+      space-y-3
+    "
+        >
+          {history.map((item, index) => (
+            <div
+              key={index}
+              className="
             border-b
             pb-2
           "
-        >
-
-          <p
-            className="
+            >
+              <p
+                className="
               font-semibold
             "
-          >
+              >
+                {item.status === "boarded" ? "✅ Boarded" : "🏫 Dropped"}
+              </p>
 
-            {item.status ===
-              "boarded"
-              ? "✅ Boarded"
-              : "🏫 Dropped"
-            }
-
-          </p>
-
-          <p
-            className="
+              <p
+                className="
               text-gray-500
               text-sm
             "
-          >
-
-            {new Date(
-              item.updated_at
-            ).toLocaleString()}
-
-          </p>
-
+              >
+                {new Date(item.updated_at).toLocaleString()}
+              </p>
+            </div>
+          ))}
         </div>
-      )
-    )}
-
-  </div>
-
-</div>
+      </div>
     </div>
   );
 }

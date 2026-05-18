@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 
@@ -10,26 +11,90 @@ type Student = {
   name: string;
 }
 
+const DriverMap = dynamic(
+  () =>
+    import("@/components/DriverMap"),
+  {
+    ssr: false,
+  }
+);
+
 export default function DriverDashboard() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
   const [tracking, setTracking] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
-
+  const [school, setSchool] = useState<any>(null);
+  const [stops, setStops] = useState<any[]>([]);
+  
   useEffect(() => {
     const fetchStudents = async() => {
       try {
         const res = await fetch("/api/driver/students");
         const data = await res.json();
         setStudents(data);
-        console.log(data);
+        console.log(
+  "Stops:",
+  data
+);
       } catch (error) {
         console.error(error);
       }
     };
 
     fetchStudents();
+
+    const fetchSchool = async () => {
+
+  try {
+
+    const schoolRes =
+      await fetch(
+        "/api/admin/school"
+      );
+
+    const schoolJson =
+      await schoolRes.json();
+
+    setSchool(
+      schoolJson
+    );
+
+  } catch (error) {
+
+    console.error(error);
+  }
+};
+
+fetchSchool();
+
+const fetchStops = async () => {
+
+  try {
+
+    const res =
+      await fetch(
+        "/api/driver/stops"
+      );
+
+    const data =
+      await res.json();
+
+    setStops(
+  Array.isArray(data)
+    ? data
+    : []
+);
+
+  } catch (error) {
+
+    console.error(error);
+  }
+};
+
+fetchStops();
+
     let watchId: number;
 
     if (tracking) {
@@ -173,6 +238,15 @@ export default function DriverDashboard() {
           </p>
         </div>
       )}
+      <div className="mt-6">
+
+  <DriverMap
+    location={location}
+    stops={stops}
+    school={school}
+  />
+
+</div>
     </div>
   );
 }
