@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
+import io from "socket.io-client";
 
 const socket = io("http://localhost:3000");
 
@@ -32,6 +32,21 @@ type School = {
 type HistoryItem = {
   status: string;
   updated_at: string | Date;
+};
+
+type BusLocationUpdate = {
+  lat: number;
+  lng: number;
+};
+
+type BusNearStopEvent = {
+  stopName: string;
+};
+
+type StudentStatusEvent = {
+  studentId?: string;
+  studentName: string;
+  status: string;
 };
 
 export default function ParentDashboard() {
@@ -155,7 +170,7 @@ export default function ParentDashboard() {
 
     fetchData();
 
-    socket.on("bus-location-update", async (liveData) => {
+    socket.on("bus-location-update", async (liveData: BusLocationUpdate) => {
       setLocation({ lat: liveData.lat, lng: liveData.lng });
 
       if (school && data?.stop_lat !== undefined && data?.stop_lng !== undefined) {
@@ -203,11 +218,11 @@ export default function ParentDashboard() {
       }
     });
 
-    socket.on("bus-near-stop", (data) => {
+    socket.on("bus-near-stop", (data: BusNearStopEvent) => {
       showNotification("Bus Near Stop", `Bus is near ${data.stopName}`);
     });
 
-    socket.on("student-status-update", (liveData) => {
+    socket.on("student-status-update", (liveData: StudentStatusEvent) => {
       showNotification("Student Update", `${liveData.studentName} ${liveData.status}`);
       setStudentNotification({
         name: liveData.studentName,
