@@ -1,12 +1,21 @@
 "use client";
 
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import "leaflet.marker.slideto";
-
+import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+import {
+  MapContainer,
+  Marker,
+  Polyline,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
+
+delete (L.Icon.Default.prototype as L.Icon.Default & { _getIconUrl?: unknown })
+  ._getIconUrl;
 
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
@@ -16,22 +25,9 @@ L.Icon.Default.mergeOptions({
 });
 
 const schoolIcon = new L.Icon({
-
-  iconUrl:
-    "https://cdn-icons-png.flaticon.com/512/167/167707.png",
-
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/167/167707.png",
   iconSize: [40, 40],
-
 });
-
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  useMap,
-  Polyline,
-} from "react-leaflet";
 
 type Props = {
   lat: number;
@@ -41,11 +37,10 @@ type Props = {
   stopLat?: number;
   stopLng?: number;
   school: {
-  latitude: number;
-  longitude: number;
-} | null;
+    latitude: number;
+    longitude: number;
+  } | null;
 };
-
 
 function FitAllMarkers({
   lat,
@@ -53,45 +48,28 @@ function FitAllMarkers({
   stopLat,
   stopLng,
   school,
-}: any) {
-
+}: {
+  lat: number;
+  lng: number;
+  stopLat?: number;
+  stopLng?: number;
+  school: Props["school"];
+}) {
   const map = useMap();
 
   useEffect(() => {
+    const bounds: [number, number][] = [[lat, lng]];
 
-    const bounds: [number, number][] = [];
-
-    bounds.push([lat, lng]);
-
-    if (
-      stopLat !== undefined &&
-      stopLng !== undefined
-    ) {
-
-      bounds.push([
-        stopLat,
-        stopLng,
-      ]);
+    if (stopLat !== undefined && stopLng !== undefined) {
+      bounds.push([stopLat, stopLng]);
     }
 
     if (school) {
-
-      bounds.push([
-        school.latitude,
-        school.longitude,
-      ]);
+      bounds.push([school.latitude, school.longitude]);
     }
 
-    map.fitBounds(bounds);
-
-  }, [
-    lat,
-    lng,
-    stopLat,
-    stopLng,
-    school,
-    map,
-  ]);
+    map.fitBounds(bounds, { padding: [32, 32] });
+  }, [lat, lng, stopLat, stopLng, school, map]);
 
   return null;
 }
@@ -106,7 +84,6 @@ export default function Map({
   school,
 }: Props) {
   const markerRef = useRef<L.Marker>(null);
-
   const [routePositions, setRoutePositions] = useState<[number, number][]>([]);
 
   useEffect(() => {
@@ -118,13 +95,10 @@ export default function Map({
           "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
           {
             method: "POST",
-
             headers: {
               "Content-Type": "application/json",
-
               Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
             },
-
             body: JSON.stringify({
               coordinates: [
                 [lng, lat],
@@ -135,11 +109,7 @@ export default function Map({
         );
 
         const data = await res.json();
-
-        console.log("Route Data:", data);
-
         const coords = data.features[0].geometry.coordinates;
-
         const formatted = coords.map((coord: number[]) => [coord[1], coord[0]]);
 
         setRoutePositions(formatted);
@@ -161,58 +131,38 @@ export default function Map({
   }, [lat, lng]);
 
   return (
-    <MapContainer
-      center={[lat, lng]}
-      zoom={13}
-      style={{ height: "100%", width: "100%" }}
-    >
+    <MapContainer center={[lat, lng]} zoom={13} style={{ height: "100%", width: "100%" }}>
       <FitAllMarkers
-  lat={lat}
-  lng={lng}
-  stopLat={stopLat}
-  stopLng={stopLng}
-  school={school}
-/>
+        lat={lat}
+        lng={lng}
+        stopLat={stopLat}
+        stopLng={stopLng}
+        school={school}
+      />
 
       <TileLayer
         attribution="© OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <Polyline positions={routePositions} />
+      <Polyline positions={routePositions} color="#2563eb" weight={5} />
 
       {school && (
+        <Marker icon={schoolIcon} position={[school.latitude, school.longitude]}>
+          <Popup>School campus</Popup>
+        </Marker>
+      )}
 
-  <Marker
-  icon={schoolIcon}
-
-  position={[
-    school.latitude,
-    school.longitude,
-  ]}
->
-
-    <Popup>
-      🏫 School
-    </Popup>
-
-  </Marker>
-
-)}
-
-      {/* BUS */}
       <Marker ref={markerRef} position={[lat, lng]}>
         <Popup>
-          🚍 Bus ID: {busId}
+          Bus ID: {busId}
           <br />
-          👨‍✈️ Driver: {driverName}
+          Driver: {driverName}
         </Popup>
       </Marker>
 
-      {/* Parent Stop Marker */}
-      {/* Parent Stop Marker */}
       {stopLat !== undefined && stopLng !== undefined && (
         <Marker position={[stopLat, stopLng]}>
-          <Popup>📍 Student Stop</Popup>
+          <Popup>Student stop</Popup>
         </Marker>
       )}
     </MapContainer>
