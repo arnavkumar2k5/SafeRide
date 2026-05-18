@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import io from "socket.io-client";
 
-const socket = io("http://https://safe-ride-weld.vercel.app/");
+const socket = io("https://safe-ride-weld.vercel.app/");
 
 type Student = {
   id: string;
