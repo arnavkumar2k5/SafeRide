@@ -5,6 +5,11 @@ import "leaflet/dist/leaflet.css";
 export const metadata: Metadata = {
   title: "SafeRide Operations",
   description: "Smart school bus tracking and transport operations dashboard",
+  icons: {
+    icon: "/logo.svg",
+    shortcut: "/logo.svg",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

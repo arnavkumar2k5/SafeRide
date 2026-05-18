@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import io from "socket.io-client";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const socket = io("https://safe-ride-weld.vercel.app/");
 
@@ -149,15 +150,7 @@ export default function DriverDashboard() {
     <main className="dashboard-shell">
       <div className="mx-auto grid min-h-screen w-full max-w-7xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[260px_1fr] lg:px-8">
         <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:block">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-amber-400 font-black text-slate-950">
-              SR
-            </div>
-            <div>
-              <p className="font-bold text-slate-950">SafeRide</p>
-              <p className="text-xs text-slate-500">Driver console</p>
-            </div>
-          </div>
+          <BrandLogo subtitle="Driver console" />
           <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
             <a className="block rounded-lg bg-slate-950 px-3 py-2 text-white" href="#route">
               Route map

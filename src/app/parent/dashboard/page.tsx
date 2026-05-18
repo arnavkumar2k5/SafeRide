@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import io from "socket.io-client";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const socket = io("https://safe-ride-weld.vercel.app/");
 
@@ -286,16 +287,19 @@ export default function ParentDashboard() {
     <main className="dashboard-shell">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
         <header className="dashboard-card flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-600">
-              Parent Portal
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">
-              {data.student_name}&apos;s Live Ride
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Bus {data.bus_id} to {data.stop_name}
-            </p>
+          <div className="flex items-start gap-4">
+            <BrandLogo />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-600">
+                Parent Portal
+              </p>
+              <h1 className="mt-1 text-2xl font-bold text-slate-950 sm:text-3xl">
+                {data.student_name}&apos;s Live Ride
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Bus {data.bus_id} to {data.stop_name}
+              </p>
+            </div>
           </div>
           <span className="status-pill bg-blue-50 text-blue-700">
             <span className="h-2 w-2 rounded-full bg-blue-500" />

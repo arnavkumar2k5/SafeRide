@@ -1,19 +1,12 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function Home() {
   return (
     <main className="dashboard-shell min-h-screen">
       <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col justify-between px-4 py-5 sm:px-6 lg:px-8">
         <nav className="dashboard-card flex items-center justify-between px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-amber-400 font-black text-slate-950">
-              SR
-            </div>
-            <div>
-              <p className="font-bold text-slate-950">SafeRide</p>
-              <p className="text-xs text-slate-500">School transport operations</p>
-            </div>
-          </div>
+          <BrandLogo subtitle="School transport operations" />
           <Link className="btn btn-primary" href="/login">
             Open Console
           </Link>

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import React, { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const AdminMap = dynamic(() => import("@/components/AdminMap"), {
   ssr: false,
@@ -471,15 +472,7 @@ export default function AdminDashboard() {
     <main className="dashboard-shell">
       <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[270px_1fr] lg:px-8">
         <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:block">
-          <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-amber-400 font-black text-slate-950">
-              SR
-            </div>
-            <div>
-              <p className="font-bold text-slate-950">SafeRide</p>
-              <p className="text-xs text-slate-500">Fleet operations</p>
-            </div>
-          </div>
+          <BrandLogo subtitle="Fleet operations" />
           <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
             {["Overview", "Live Map", "Students", "Fleet", "Attendance"].map((item) => (
               <a

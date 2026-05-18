@@ -2,7 +2,9 @@
 
 import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { signIn } from "next-auth/react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/BrandLogo";
 
 type Role = "admin" | "parent" | "driver";
 type Mode = "landing" | "signin-role" | "register-role" | "login" | "register" | "demo";
@@ -204,17 +206,7 @@ export default function LoginPage() {
           </div>
 
           <div className="relative">
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-lg bg-amber-400 text-base font-black text-slate-950 shadow-lg shadow-amber-400/20">
-                SR
-              </div>
-              <div>
-                <p className="text-lg font-black">SafeRide</p>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Smart School Bus Tracking
-                </p>
-              </div>
-            </div>
+            <BrandLogo subtitle="Smart School Bus Tracking" inverted />
 
             <div className="max-w-xl py-12 lg:py-20">
               <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">
@@ -227,6 +219,19 @@ export default function LoginPage() {
                 Sign in as an admin, parent, or driver and move straight into live fleet visibility,
                 route control, attendance events, and ETA tracking.
               </p>
+            </div>
+
+            <div className="hidden max-w-md rounded-lg border border-white/10 bg-white/[0.06] p-4 shadow-2xl shadow-black/10 sm:block">
+              <div className="relative aspect-[3/2] overflow-hidden rounded-md bg-white">
+                <Image
+                  src="/logo.png"
+                  alt="SafeRide"
+                  fill
+                  sizes="(min-width: 1024px) 448px, 80vw"
+                  className="object-contain p-3"
+                  priority
+                />
+              </div>
             </div>
           </div>
 
