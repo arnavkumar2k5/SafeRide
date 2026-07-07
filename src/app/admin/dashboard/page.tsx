@@ -65,6 +65,7 @@ type AttendanceItem = {
   student_name: string;
   status: string;
   bus_id: string;
+  bus_number: string;
   driver_name: string;
   updated_at: string | Date;
 };
@@ -853,7 +854,7 @@ export default function AdminDashboard() {
                           {item.status === "boarded" ? "Boarded" : "Dropped"}
                         </span>
                       </td>
-                      <td>{item.bus_id}</td>
+                      <td>{item.bus_number}</td>
                       <td>{item.driver_name}</td>
                       <td>{new Date(item.updated_at).toLocaleString()}</td>
                     </tr>
