@@ -17,6 +17,7 @@ type LiveBus = {
 
 type Bus = {
   id: string;
+  bus_number: string;
   driver_name: string | null;
 };
 
@@ -49,6 +50,7 @@ type Student = {
   parent_name: string;
   parent_email: string;
   bus_id: string;
+  bus_number: string;
   stop_name: string;
   parent_id: string;
   stop_id: string;
@@ -314,26 +316,38 @@ export default function AdminDashboard() {
   };
 
   const addBus = async () => {
-    try {
-      await fetch("/api/admin/add-bus", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ busNumber }),
-      });
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              buses: [...prev.buses, { id: busNumber, driver_name: null }],
-            }
-          : prev,
-      );
-      setBusNumber("");
-      setBuses((prev) => [...prev, { id: busNumber, driver_name: null }]);
-    } catch (error) {
-      console.error(error);
+  try {
+    const res = await fetch("/api/admin/add-bus", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ busNumber }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      alert(json.error);
+      return;
     }
-  };
+
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            buses: [...prev.buses, json.bus],
+          }
+        : prev
+    );
+
+    setBuses((prev) => [...prev, json.bus]);
+
+    setBusNumber("");
+  } catch (error) {
+    console.error(error);
+  }
+};
 
   const saveBus = async (busId: string) => {
     try {
@@ -548,7 +562,7 @@ export default function AdminDashboard() {
                     <option value="">Select bus</option>
                     {data.buses.map((bus) => (
                       <option key={bus.id} value={bus.id}>
-                        {bus.id}
+                        {bus.bus_number}
                       </option>
                     ))}
                   </select>
@@ -609,7 +623,7 @@ export default function AdminDashboard() {
                   <option value="">Select bus</option>
                   {buses.map((bus) => (
                     <option key={bus.id} value={bus.id}>
-                      {bus.id}
+                      {bus.bus_number}
                     </option>
                   ))}
                 </select>
@@ -666,7 +680,7 @@ export default function AdminDashboard() {
                   <option value="">Bus</option>
                   {buses.map((bus) => (
                     <option key={bus.id} value={bus.id}>
-                      {bus.id}
+                      {bus.bus_number}
                     </option>
                   ))}
                 </select>
@@ -707,7 +721,7 @@ export default function AdminDashboard() {
                           <td>{student.parent_name}</td>
                           <td>{student.parent_email}</td>
                           <td>
-                            <span className="status-pill bg-blue-50 text-blue-700">{student.bus_id}</span>
+                            <span className="status-pill bg-blue-50 text-blue-700">{student.bus_number}</span>
                           </td>
                           <td>{student.stop_name}</td>
                           <td>
@@ -734,7 +748,7 @@ export default function AdminDashboard() {
                                   <option value="">Select bus</option>
                                   {buses.map((bus) => (
                                     <option key={bus.id} value={bus.id}>
-                                      {bus.id}
+                                      {bus.bus_number}
                                     </option>
                                   ))}
                                 </select>
@@ -779,7 +793,7 @@ export default function AdminDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-xs font-bold uppercase text-slate-400">Bus</p>
-                        <p className="text-xl font-bold text-slate-950">{bus.id}</p>
+                        <p className="text-xl font-bold text-slate-950">{bus.bus_number}</p>
                         <p className="mt-1 text-sm text-slate-500">
                           {bus.driver_name || "Not assigned"}
                         </p>

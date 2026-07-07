@@ -8,7 +8,7 @@ export async function GET(){
         `);
 
         const buses = await pool.query(`
-            SELECT id FROM buses
+            SELECT id, bus_number FROM buses
         `);
 
         return NextResponse.json({

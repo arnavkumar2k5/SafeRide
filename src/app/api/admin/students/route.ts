@@ -2,47 +2,43 @@ import pool from "@/lib/db";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  try {
+    const result = await pool.query(`
+      SELECT
+        students.id,
+        students.name AS student_name,
 
-    try {
+        students.parent_id,
+        students.stop_id,
 
-        const result = await pool.query(`
-            SELECT
-                students.id,
-                students.name AS student_name,
+        users.name AS parent_name,
+        users.email AS parent_email,
 
-                students.parent_id,
-                students.stop_id,
+        buses.id AS bus_id,
+        buses.bus_number,
 
-                users.name AS parent_name,
-                users.email AS parent_email,
+        stops.name AS stop_name
 
-                buses.id AS bus_id,
+      FROM students
 
-                stops.name AS stop_name
+      LEFT JOIN users
+        ON students.parent_id = users.id
 
-            FROM students
+      LEFT JOIN buses
+        ON students.bus_id = buses.id
 
-            LEFT JOIN users
-            ON students.parent_id = users.id
+      LEFT JOIN stops
+        ON students.stop_id = stops.id
+    `);
 
-            LEFT JOIN buses
-            ON students.bus_id = buses.id
+    return NextResponse.json(result.rows);
 
-            LEFT JOIN stops
-            ON students.stop_id = stops.id
-        `);
+  } catch (error) {
+    console.error(error);
 
-        return NextResponse.json(
-            result.rows
-        );
-
-    } catch (error) {
-
-        console.error(error);
-
-        return NextResponse.json(
-            { error: "Server Error" },
-            { status: 500 }
-        );
-    }
+    return NextResponse.json(
+      { error: "Server Error" },
+      { status: 500 }
+    );
+  }
 }
