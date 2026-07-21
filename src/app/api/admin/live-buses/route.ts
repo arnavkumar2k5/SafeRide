@@ -1,35 +1,72 @@
 import pool from "@/lib/db";
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "../../auth/[...nextauth]/route";
 
 export async function GET() {
   try {
-    const result = await pool.query(`
-            SELECT
-                buses.id AS bus_id,
+    const session = await getServerSession(authOptions);
 
-                users.name AS driver_name,
+    if (!session) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
-                ST_Y(
-                  bus_locations.location::geometry
-                ) AS lat,
+    const admin = await pool.query(
+      `
+      SELECT school_id
+      FROM users
+      WHERE id = $1
+      `,
+      [session.user.id]
+    );
 
-                ST_X(
-                  bus_locations.location::geometry
-                ) AS lng
+    if (admin.rows.length === 0) {
+      return NextResponse.json(
+        { error: "Admin not found" },
+        { status: 404 }
+      );
+    }
 
-            FROM buses
+    const schoolId = admin.rows[0].school_id;
 
-            LEFT JOIN users
-            ON buses.driver_id = users.id
+    const result = await pool.query(
+      `
+      SELECT
+        buses.id AS bus_id,
 
-            LEFT JOIN bus_locations
-            ON buses.id = bus_locations.bus_id
-`);
+        users.name AS driver_name,
+
+        ST_Y(
+          bus_locations.location::geometry
+        ) AS lat,
+
+        ST_X(
+          bus_locations.location::geometry
+        ) AS lng
+
+      FROM buses
+
+      LEFT JOIN users
+        ON buses.driver_id = users.id
+
+      LEFT JOIN bus_locations
+        ON buses.id = bus_locations.bus_id
+
+      WHERE buses.school_id = $1
+      `,
+      [schoolId]
+    );
 
     return NextResponse.json(result.rows);
   } catch (error) {
     console.error(error);
 
-    return NextResponse.json({ error: "Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server Error" },
+      { status: 500 }
+    );
   }
 }

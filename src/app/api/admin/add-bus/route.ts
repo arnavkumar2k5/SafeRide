@@ -41,14 +41,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const { busNumber } = await req.json();
+    const { busNumber, routeId } = await req.json();
 
-    if (!busNumber || busNumber.trim() === "") {
-      return NextResponse.json(
-        { error: "Bus Number Required" },
+    if (
+    !busNumber ||
+    busNumber.trim() === "" ||
+    !routeId
+) {
+    return NextResponse.json(
+        { error: "Bus number and route are required" },
         { status: 400 }
-      );
-    }
+    );
+}
 
     // Duplicate check
     const exists = await pool.query(
@@ -69,24 +73,22 @@ export async function POST(req: Request) {
     }
 
     // Get first route of this school
-    const routeResult = await pool.query(
-      `
-      SELECT id
-      FROM routes
-      WHERE school_id = $1
-      LIMIT 1
-      `,
-      [schoolId]
-    );
+    const validRoute = await pool.query(
+  `
+  SELECT id
+  FROM routes
+  WHERE id = $1
+    AND school_id = $2
+  `,
+  [routeId, schoolId]
+);
 
-    if (routeResult.rows.length === 0) {
-      return NextResponse.json(
-        { error: "Please create a route first." },
-        { status: 400 }
-      );
-    }
-
-    const routeId = routeResult.rows[0].id;
+if (validRoute.rows.length === 0) {
+  return NextResponse.json(
+    { error: "Invalid route selected" },
+    { status: 400 }
+  );
+}
 
     // Get first driver of this school (optional)
     const driverResult = await pool.query(

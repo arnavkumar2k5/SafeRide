@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
 
-export async function GET() {
+export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -18,42 +18,57 @@ export async function GET() {
       `
       SELECT school_id
       FROM users
-      WHERE id = $1
+      WHERE id=$1
       `,
       [session.user.id]
     );
 
-    if (admin.rows.length === 0) {
+    const schoolId = admin.rows[0].school_id;
+
+    const { name } = await req.json();
+
+    if (!name) {
       return NextResponse.json(
-        { error: "Admin not found" },
-        { status: 404 }
+        { error: "Route name required" },
+        { status: 400 }
       );
     }
 
-    const schoolId = admin.rows[0].school_id;
-
-    const drivers = await pool.query(
+    const exists = await pool.query(
       `
-      SELECT id, name, email
-      FROM users
-      WHERE role = 'driver'
-      AND school_id = $1
+      SELECT id
+      FROM routes
+      WHERE school_id=$1
+      AND name=$2
       `,
-      [schoolId]
+      [schoolId, name]
     );
 
-    const buses = await pool.query(
+    if (exists.rows.length > 0) {
+      return NextResponse.json(
+        { error: "Route already exists" },
+        { status: 409 }
+      );
+    }
+
+    await pool.query(
       `
-      SELECT id, bus_number
-      FROM buses
-      WHERE school_id = $1
+      INSERT INTO routes(
+        id,
+        school_id,
+        name
+      )
+      VALUES(
+        gen_random_uuid(),
+        $1,
+        $2
+      )
       `,
-      [schoolId]
+      [schoolId, name]
     );
 
     return NextResponse.json({
-      drivers: drivers.rows,
-      buses: buses.rows,
+      message: "Route Added Successfully",
     });
 
   } catch (error) {

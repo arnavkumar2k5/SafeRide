@@ -6,7 +6,6 @@ import { authOptions } from "../../auth/[...nextauth]/route";
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    console.log("Logged in user:", session.user);
     
     if (!session) {
       return NextResponse.json(
@@ -14,6 +13,7 @@ export async function GET() {
         { status: 401 }
       );
     }
+    console.log("Logged in user:", session.user);
     
     const adminResult = await pool.query(
       `

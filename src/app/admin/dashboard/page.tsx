@@ -90,10 +90,10 @@ export default function AdminDashboard() {
   const [buses, setBuses] = useState<Bus[]>([]);
   const [selectedDriver, setSelectedDriver] = useState("");
   const [selectedBus, setSelectedBus] = useState("");
-  const [parents, setParents] = useState<Parent[]>([]);
   const [stops, setStops] = useState<Stop[]>([]);
   const [studentName, setStudentName] = useState("");
-  const [selectedParent, setSelectedParent] = useState("");
+  const [parentName, setParentName] = useState("");
+const [parentEmail, setParentEmail] = useState("");
   const [selectedStudentBus, setSelectedStudentBus] = useState("");
   const [selectedStop, setSelectedStop] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
@@ -110,14 +110,18 @@ export default function AdminDashboard() {
   const [driverName, setDriverName] = useState("");
   const [driverEmail, setDriverEmail] = useState("");
   const [driverPassword, setDriverPassword] = useState("");
+  const [routeName, setRouteName] = useState("");
   const [stopName, setStopName] = useState("");
   const [stopLat, setStopLat] = useState("");
   const [stopLng, setStopLng] = useState("");
+  const [routes, setRoutes] = useState<{ id: string; name: string }[]>([]);
+const [selectedRoute, setSelectedRoute] = useState("");
   const [replayPosition, setReplayPosition] = useState<[number, number] | null>(
     null,
   );
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [school, setSchool] = useState<School | null>(null);
+  const [selectedBusRoute, setSelectedBusRoute] = useState("");
 
   const fetchTripHistory = async (busId: string) => {
     try {
@@ -157,54 +161,57 @@ export default function AdminDashboard() {
     }
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch("/api/admin/dashboard");
-        if (!res.ok) throw new Error("Failed to fetch Dashboard");
+  const fetchData = async () => {
+    try {
+      const res = await fetch("/api/admin/dashboard");
+      if (!res.ok) throw new Error("Failed to fetch Dashboard");
 
-        const json = await res.json();
-        setData(json);
+      const json = await res.json();
+      setData(json);
 
-        if (json.buses.length > 0) {
-          const firstBusId = json.buses[0].id;
-          setSelectedTripBus(firstBusId);
-          fetchTripHistory(firstBusId);
-        }
-
-        const assignRes = await fetch("/api/admin/assign-data");
-        const assignJson = await assignRes.json();
-        setDrivers(assignJson.drivers);
-        setBuses(assignJson.buses);
-
-        const studentRes = await fetch("/api/admin/student-data");
-        const studentJson = await studentRes.json();
-        setParents(studentJson.parents);
-        setStops(studentJson.stops);
-
-        const studentsRes = await fetch("/api/admin/students");
-        const studentsJson = await studentsRes.json();
-        setStudents(studentsJson);
-
-        const liveRes = await fetch("/api/admin/live-buses");
-        const liveJson = await liveRes.json();
-        setLiveBuses(liveJson);
-
-        const analyticsRes = await fetch("/api/admin/analytics");
-        const analyticsJson = await analyticsRes.json();
-
-        const schoolRes = await fetch("/api/admin/school");
-        const schoolJson = await schoolRes.json();
-        setSchool(schoolJson);
-
-        setAnalytics(analyticsJson);
-      } catch (error: unknown) {
-        setError(error instanceof Error ? error.message : "Failed to fetch Dashboard");
-      } finally {
-        setLoading(false);
+      if (json.buses.length > 0) {
+        const firstBusId = json.buses[0].id;
+        setSelectedTripBus(firstBusId);
+        fetchTripHistory(firstBusId);
       }
-    };
 
+      const assignRes = await fetch("/api/admin/assign-data");
+      const assignJson = await assignRes.json();
+      setDrivers(assignJson.drivers);
+      setBuses(assignJson.buses);
+
+      const studentRes = await fetch("/api/admin/student-data");
+      const studentJson = await studentRes.json();
+      setStops(studentJson.stops);
+
+      const routesRes = await fetch("/api/admin/routes");
+const routesJson = await routesRes.json();
+setRoutes(routesJson);
+
+      const studentsRes = await fetch("/api/admin/students");
+      const studentsJson = await studentsRes.json();
+      setStudents(studentsJson);
+
+      const liveRes = await fetch("/api/admin/live-buses");
+      const liveJson = await liveRes.json();
+      setLiveBuses(liveJson);
+
+      const analyticsRes = await fetch("/api/admin/analytics");
+      const analyticsJson = await analyticsRes.json();
+
+      const schoolRes = await fetch("/api/admin/school");
+      const schoolJson = await schoolRes.json();
+      setSchool(schoolJson);
+
+      setAnalytics(analyticsJson);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Failed to fetch Dashboard");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAttendance();
     fetchData();
@@ -229,29 +236,56 @@ export default function AdminDashboard() {
         body: JSON.stringify({ driverId: selectedDriver, busId: selectedBus }),
       });
       const json = await res.json();
-      alert(json.message);
+
+if (!res.ok) {
+    alert(json.error);
+    return;
+}
+
+await fetchData();
+
+alert(json.message);
     } catch (error) {
       console.error(error);
     }
   };
 
   const addStudent = async () => {
-    if (!studentName || !selectedParent || !selectedStudentBus || !selectedStop) {
-      alert("Fill all the fields");
-      return;
-    }
+    if (
+    !studentName ||
+    !parentName ||
+    !parentEmail ||
+    !selectedStudentBus ||
+    !selectedStop
+) {
+    alert("Fill all fields");
+    return;
+}
     try {
       const res = await fetch("/api/admin/add-student", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: studentName,
-          parentId: selectedParent,
-          busId: selectedStudentBus,
-          stopId: selectedStop,
-        }),
+    studentName,
+    parentName,
+    parentEmail,
+    busId: selectedStudentBus,
+    stopId: selectedStop,
+})
       });
+
       const json = await res.json();
+      if (!res.ok) {
+      alert(json.error);
+      return;
+      }
+      
+      await fetchData();
+      setStudentName("");
+setParentName("");
+setParentEmail("");
+setSelectedStudentBus("");
+setSelectedStop("");
       alert(json.message);
     } catch (error) {
       console.error(error);
@@ -287,6 +321,11 @@ export default function AdminDashboard() {
         ),
       );
       setEditingStudent(null);
+      setStudentName("");
+setParentName("");
+setParentEmail("");
+setSelectedStudentBus("");
+setSelectedStop("");
     } catch (error) {
       console.error(error);
     }
@@ -323,7 +362,10 @@ export default function AdminDashboard() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ busNumber }),
+      body: JSON.stringify({
+    busNumber,
+    routeId: selectedBusRoute,
+})
     });
 
     const json = await res.json();
@@ -333,18 +375,11 @@ export default function AdminDashboard() {
       return;
     }
 
-    setData((prev) =>
-      prev
-        ? {
-            ...prev,
-            buses: [...prev.buses, json.bus],
-          }
-        : prev
-    );
-
-    setBuses((prev) => [...prev, json.bus]);
+    await fetchData();
 
     setBusNumber("");
+setSelectedBusRoute("");
+alert(json.message);
   } catch (error) {
     console.error(error);
   }
@@ -352,31 +387,28 @@ export default function AdminDashboard() {
 
   const saveBus = async (busId: string) => {
     try {
-      await fetch(`/api/admin/edit-bus/${busId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ driverId: selectedEditDriver }),
-      });
+      const res = await fetch(`/api/admin/edit-bus/${busId}`, {
+    method: "PUT",
+    headers: {
+        "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+        driverId: selectedEditDriver,
+    }),
+});
 
-      setData((prev) =>
-        prev
-          ? {
-              ...prev,
-              buses: prev.buses.map((b) =>
-                b.id === busId
-                  ? {
-                      ...b,
-                      driver_name:
-                        drivers.find((d) => d.id === selectedEditDriver)?.name ||
-                        "Not Assigned",
-                    }
-                  : b,
-              ),
-            }
-          : prev,
-      );
+const json = await res.json();
 
-      setEditingBus(null);
+if (!res.ok) {
+    alert(json.error);
+    return;
+}
+
+await fetchData();
+
+setEditingBus(null);
+
+alert(json.message);
     } catch (error) {
       console.error(error);
     }
@@ -401,19 +433,48 @@ export default function AdminDashboard() {
         return;
       }
 
-      alert(json.message);
-
-      const assignRes = await fetch("/api/admin/assign-data");
-      const assignJson = await assignRes.json();
-      setDrivers(assignJson.drivers);
-
+      
+      await fetchData();
+      
       setDriverName("");
       setDriverEmail("");
       setDriverPassword("");
+
+      alert(json.message);
     } catch (error) {
       console.error(error);
     }
   };
+
+  const addRoute = async () => {
+  try {
+    const res = await fetch("/api/admin/add-route", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: routeName,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      alert(json.error);
+      return;
+    }
+
+    
+    setRouteName("");
+    
+    await fetchData();
+    
+    alert(json.message);
+  } catch (error) {
+    console.error(error);
+  }
+};
 
   const addStop = async () => {
     try {
@@ -421,10 +482,11 @@ export default function AdminDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: stopName,
-          lat: parseFloat(stopLat),
-          lng: parseFloat(stopLng),
-        }),
+    name: stopName,
+    routeId: selectedRoute,
+    lat: parseFloat(stopLat),
+    lng: parseFloat(stopLng),
+}),
       });
 
       const json = await res.json();
@@ -434,15 +496,15 @@ export default function AdminDashboard() {
         return;
       }
 
-      alert(json.message);
-
-      const studentRes = await fetch("/api/admin/student-data");
-      const studentJson = await studentRes.json();
-      setStops(studentJson.stops);
-
+      
+      await fetchData();
+      
       setStopName("");
       setStopLat("");
       setStopLng("");
+      setSelectedRoute("");
+      
+      alert(json.message);
     } catch (error) {
       console.error(error);
     }
@@ -635,6 +697,33 @@ export default function AdminDashboard() {
             </div>
 
             <div className="dashboard-card p-5">
+
+  <h2 className="text-lg font-bold text-slate-950">
+    Add Route
+  </h2>
+
+  <div className="mt-4 space-y-3">
+
+    <input
+      type="text"
+      className="field"
+      placeholder="Route Name"
+      value={routeName}
+      onChange={(e) => setRouteName(e.target.value)}
+    />
+
+    <button
+      className="btn btn-primary w-full"
+      onClick={addRoute}
+    >
+      Add Route
+    </button>
+
+  </div>
+
+</div>
+
+            <div className="dashboard-card p-5">
               <h2 className="text-lg font-bold text-slate-950">Add driver</h2>
               <div className="mt-4 space-y-3">
                 <input type="text" placeholder="Driver name" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="field" />
@@ -650,6 +739,19 @@ export default function AdminDashboard() {
               <h2 className="text-lg font-bold text-slate-950">Add stop</h2>
               <div className="mt-4 space-y-3">
                 <input type="text" placeholder="Stop name" value={stopName} onChange={(e) => setStopName(e.target.value)} className="field" />
+                <select
+    value={selectedRoute}
+    onChange={(e) => setSelectedRoute(e.target.value)}
+    className="field"
+>
+    <option value="">Select Route</option>
+
+    {routes.map((route) => (
+        <option key={route.id} value={route.id}>
+            {route.name}
+        </option>
+    ))}
+</select>
                 <div className="grid grid-cols-2 gap-3">
                   <input type="number" placeholder="Latitude" value={stopLat} onChange={(e) => setStopLat(e.target.value)} className="field" />
                   <input type="number" placeholder="Longitude" value={stopLng} onChange={(e) => setStopLng(e.target.value)} className="field" />
@@ -667,16 +769,23 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold text-slate-950">Student management</h2>
                 <p className="text-sm text-slate-500">Create, edit, and assign students to buses and stops.</p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[190px_220px_150px_150px_auto]">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[180px_180px_220px_150px_150px_auto]">
                 <input type="text" placeholder="Student name" value={studentName} onChange={(e) => setStudentName(e.target.value)} className="field" />
-                <select value={selectedParent} onChange={(e) => setSelectedParent(e.target.value)} className="field">
-                  <option value="">Parent</option>
-                  {parents.map((parent) => (
-                    <option key={parent.id} value={parent.id}>
-                      {parent.name}
-                    </option>
-                  ))}
-                </select>
+                <input
+    type="text"
+    placeholder="Parent Name"
+    value={parentName}
+    onChange={(e) => setParentName(e.target.value)}
+    className="field"
+/>
+
+<input
+    type="email"
+    placeholder="Parent Email"
+    value={parentEmail}
+    onChange={(e) => setParentEmail(e.target.value)}
+    className="field"
+/>
                 <select value={selectedStudentBus} onChange={(e) => setSelectedStudentBus(e.target.value)} className="field">
                   <option value="">Bus</option>
                   {buses.map((bus) => (
@@ -779,6 +888,19 @@ export default function AdminDashboard() {
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input type="text" value={busNumber} onChange={(e) => setBusNumber(e.target.value)} placeholder="Bus number" className="field" />
+                <select
+  value={selectedBusRoute}
+  onChange={(e) => setSelectedBusRoute(e.target.value)}
+  className="field"
+>
+  <option value="">Select Route</option>
+
+  {routes.map((route) => (
+    <option key={route.id} value={route.id}>
+      {route.name}
+    </option>
+  ))}
+</select>
                 <button className="btn btn-primary" onClick={addBus}>
                   Add Bus
                 </button>
