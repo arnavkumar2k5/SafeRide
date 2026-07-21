@@ -98,9 +98,17 @@ const [parentEmail, setParentEmail] = useState("");
   const [selectedStop, setSelectedStop] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [liveBuses, setLiveBuses] = useState<LiveBus[]>([]);
+  type RouteMap = {
+    busId: string;
+    busNumber: string;
+    routeName: string;
+    coordinates: [number, number][];
+};
+
+const [routeLines, setRouteLines] = useState<RouteMap[]>([]);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceItem[]>([]);
   const [tripHistory, setTripHistory] = useState<[number, number][]>([]);
-  const [selectedTripBus, setSelectedTripBus] = useState<string>("");
+  const [selectedTripBus, setSelectedTripBus] = useState<string>("all");
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editBus, setEditBus] = useState("");
@@ -169,11 +177,6 @@ const [selectedRoute, setSelectedRoute] = useState("");
       const json = await res.json();
       setData(json);
 
-      if (json.buses.length > 0) {
-        const firstBusId = json.buses[0].id;
-        setSelectedTripBus(firstBusId);
-        fetchTripHistory(firstBusId);
-      }
 
       const assignRes = await fetch("/api/admin/assign-data");
       const assignJson = await assignRes.json();
@@ -193,6 +196,12 @@ setRoutes(routesJson);
       setStudents(studentsJson);
 
       const liveRes = await fetch("/api/admin/live-buses");
+
+      const routesMapRes = await fetch("/api/admin/routes-map");
+const routesMapJson = await routesMapRes.json();
+
+setRouteLines(routesMapJson);
+
       const liveJson = await liveRes.json();
       setLiveBuses(liveJson);
 
@@ -218,11 +227,13 @@ setRoutes(routesJson);
   }, []);
 
   useEffect(() => {
-    if (selectedTripBus) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchTripHistory(selectedTripBus);
+    if (selectedTripBus !== "all") {
+        fetchTripHistory(selectedTripBus);
+    } else {
+        setTripHistory([]);
+        setReplayPosition(null);
     }
-  }, [selectedTripBus]);
+}, [selectedTripBus]);
 
   const assignDriver = async () => {
     if (!selectedDriver || !selectedBus) {
@@ -622,7 +633,7 @@ alert(json.message);
                     onChange={(e) => setSelectedTripBus(e.target.value)}
                     className="field min-w-44"
                   >
-                    <option value="">Select bus</option>
+                    <option value="all">All Buses</option>
                     {data.buses.map((bus) => (
                       <option key={bus.id} value={bus.id}>
                         {bus.bus_number}
@@ -636,11 +647,13 @@ alert(json.message);
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
                 <AdminMap
-                  buses={liveBuses}
-                  tripHistory={tripHistory}
-                  replayPosition={replayPosition}
-                  school={school}
-                />
+    buses={liveBuses}
+    routes={routeLines}
+    selectedBus={selectedTripBus}
+    tripHistory={tripHistory}
+    replayPosition={replayPosition}
+    school={school}
+/>
               </div>
             </div>
 

@@ -23,6 +23,13 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
 });
 
+const busIcon = new L.Icon({
+  iconUrl: "/icons/bus.svg",
+  iconSize: [40, 40],
+  iconAnchor: [18, 18],
+  popupAnchor: [0, -18],
+});
+
 const schoolIcon = new L.Icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/167/167707.png",
   iconSize: [40, 40],
@@ -35,8 +42,23 @@ type Bus = {
   lng: number;
 };
 
+type RouteLine = {
+  busId: string;
+  busNumber: string;
+  routeName: string;
+  coordinates: [number, number][];
+  stops: {
+    name: string;
+    stopOrder: number;
+    lat: number;
+    lng: number;
+  }[];
+};
+
 type Props = {
   buses: Bus[];
+  routes: RouteLine[];
+  selectedBus: string;
   tripHistory?: [number, number][];
   replayPosition?: [number, number] | null;
   school: {
@@ -45,24 +67,63 @@ type Props = {
   } | null;
 };
 
-function FitBounds({ tripHistory }: { tripHistory: [number, number][] }) {
+function FitBounds({
+  buses,
+  routes,
+  school,
+}: {
+  buses: Bus[];
+  routes: RouteLine[];
+  school: {
+    latitude: number;
+    longitude: number;
+  } | null;
+}) {
   const map = useMap();
 
   useEffect(() => {
-    if (tripHistory.length > 0) {
-      map.fitBounds(tripHistory, { padding: [32, 32] });
+    const points: [number, number][] = [];
+
+    buses.forEach((bus) => {
+      if (bus.lat && bus.lng) {
+        points.push([bus.lat, bus.lng]);
+      }
+    });
+
+    routes.forEach((route) => {
+      points.push(...route.coordinates);
+    });
+
+    if (school) {
+      points.push([
+        school.latitude,
+        school.longitude,
+      ]);
     }
-  }, [map, tripHistory]);
+
+    if (points.length > 0) {
+      map.fitBounds(points, {
+        padding: [50, 50],
+      });
+    }
+  }, [map, buses, routes, school]);
 
   return null;
 }
 
 export default function AdminMap({
   buses,
+  routes,
+  selectedBus,
   tripHistory,
   replayPosition,
   school,
 }: Props) {
+  const busesToShow =
+  selectedBus === "all"
+    ? buses
+    : buses.filter((bus) => bus.bus_id === selectedBus);
+    console.log(JSON.stringify(routes, null, 2));
   return (
     <MapContainer
       center={[28.7041, 77.1025]}
@@ -80,14 +141,23 @@ export default function AdminMap({
         </Marker>
       )}
 
-      {tripHistory && tripHistory.length > 0 && (
-        <FitBounds tripHistory={tripHistory} />
-      )}
+      <FitBounds
+  buses={busesToShow}
+  routes={routes.filter(
+    (r) =>
+      selectedBus === "all" || r.busId === selectedBus
+  )}
+  school={school}
+/>
 
-      {buses
+      {busesToShow
         .filter((bus) => bus.lat !== null && bus.lng !== null)
         .map((bus) => (
-          <Marker key={bus.bus_id} position={[bus.lat, bus.lng]}>
+          <Marker
+  key={bus.bus_id}
+  position={[bus.lat, bus.lng]}
+  icon={busIcon}
+>
             <Popup>
               Bus: {bus.bus_id}
               <br />
@@ -95,6 +165,52 @@ export default function AdminMap({
             </Popup>
           </Marker>
         ))}
+
+        {routes
+  .filter(
+    (route) =>
+      selectedBus === "all" || route.busId === selectedBus
+  )
+  .map((route, index) => (
+    <Polyline
+      key={route.busId}
+      positions={route.coordinates}
+      color={
+        [
+          "red",
+          "blue",
+          "green",
+          "purple",
+          "orange",
+          "teal",
+          "brown",
+          "pink",
+        ][index % 8]
+      }
+      weight={5}
+    />
+))}
+{routes
+  .filter(
+    (route) =>
+      selectedBus === "all" || route.busId === selectedBus
+  )
+  .flatMap((route) =>
+    route.stops.map((stop) => (
+      <Marker
+        key={`${route.busId}-${stop.stopOrder}`}
+        position={[stop.lat, stop.lng]}
+      >
+        <Popup>
+          <strong>{stop.name}</strong>
+          <br />
+          Route: {route.routeName}
+          <br />
+          Stop #{stop.stopOrder}
+        </Popup>
+      </Marker>
+    ))
+  )}
 
       {tripHistory && tripHistory.length > 0 && (
         <Polyline positions={tripHistory} color="#ef4444" weight={6} />
