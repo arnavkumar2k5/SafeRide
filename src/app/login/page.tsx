@@ -123,18 +123,34 @@ export default function LoginPage() {
   };
 
   const routeAfterLogin = async () => {
-    const res = await fetch("/api/auth/session");
-    const session = await res.json();
-    const role = session?.user?.role;
+  const sessionRes = await fetch("/api/auth/session");
+  const session = await sessionRes.json();
 
-    if (role === "parent") {
-      router.push("/parent/dashboard");
-    } else if (role === "driver") {
-      router.push("/driver/dashboard");
-    } else if (role === "admin") {
+  const role = session?.user?.role;
+
+  if (role === "parent") {
+    router.push("/parent/dashboard");
+    return;
+  }
+
+  if (role === "driver") {
+    router.push("/driver/dashboard");
+    return;
+  }
+
+  if (role === "admin") {
+    const schoolRes = await fetch("/api/admin/school");
+    const school = await schoolRes.json();
+
+    if (!school.latitude || !school.longitude) {
+      router.push("/admin/setup-school");
+    } else {
       router.push("/admin/dashboard");
     }
-  };
+
+    return;
+  }
+};
 
   const handleLogin = async (loginEmail: string, loginPassword: string) => {
     setBusy(true);
