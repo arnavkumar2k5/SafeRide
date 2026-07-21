@@ -35,27 +35,32 @@ export async function GET() {
     const result = await pool.query(
       `
       SELECT
-        buses.id AS bus_id,
+    buses.id AS bus_id,
+    buses.bus_number,
 
-        users.name AS driver_name,
+    users.name AS driver_name,
 
-        ST_Y(
-          bus_locations.location::geometry
-        ) AS lat,
+    routes.name AS route_name,
 
-        ST_X(
-          bus_locations.location::geometry
-        ) AS lng
+    ST_Y(bus_locations.location::geometry) AS lat,
+    ST_X(bus_locations.location::geometry) AS lng,
 
-      FROM buses
+    bus_locations.speed,
 
-      LEFT JOIN users
-        ON buses.driver_id = users.id
+    bus_locations.updated_at
 
-      LEFT JOIN bus_locations
-        ON buses.id = bus_locations.bus_id
+FROM buses
 
-      WHERE buses.school_id = $1
+LEFT JOIN users
+ON buses.driver_id = users.id
+
+LEFT JOIN routes
+ON buses.route_id = routes.id
+
+LEFT JOIN bus_locations
+ON buses.id = bus_locations.bus_id
+
+WHERE buses.school_id = $1
       `,
       [schoolId]
     );

@@ -37,9 +37,13 @@ const schoolIcon = new L.Icon({
 
 type Bus = {
   bus_id: string;
+  bus_number: string;
   driver_name: string;
+  route_name: string;
   lat: number;
   lng: number;
+  speed: number | null;
+  updated_at: string | null;
 };
 
 type RouteLine = {
@@ -62,9 +66,10 @@ type Props = {
   tripHistory?: [number, number][];
   replayPosition?: [number, number] | null;
   school: {
-    latitude: number;
-    longitude: number;
-  } | null;
+  latitude: number;
+  longitude: number;
+  name: string;
+} | null;
 };
 
 function FitBounds({
@@ -137,7 +142,19 @@ export default function AdminMap({
 
       {school && (
         <Marker icon={schoolIcon} position={[school.latitude, school.longitude]}>
-          <Popup>School campus</Popup>
+          <Popup>
+  <div className="space-y-1">
+    <h3 className="font-semibold">{school.name}</h3>
+
+    <p>
+      <strong>Routes:</strong> {routes.length}
+    </p>
+
+    <p>
+      <strong>Buses:</strong> {buses.length}
+    </p>
+  </div>
+</Popup>
         </Marker>
       )}
 
@@ -159,10 +176,32 @@ export default function AdminMap({
   icon={busIcon}
 >
             <Popup>
-              Bus: {bus.bus_id}
-              <br />
-              Driver: {bus.driver_name}
-            </Popup>
+  <div className="space-y-1 min-w-[180px]">
+    <h3 className="font-bold">
+      🚌 {bus.bus_number}
+    </h3>
+
+    <p>
+      <strong>Driver:</strong> {bus.driver_name}
+    </p>
+
+    <p>
+      <strong>Route:</strong> {bus.route_name}
+    </p>
+
+    <p>
+      <strong>Speed:</strong>{" "}
+      {bus.speed ?? 0} km/h
+    </p>
+
+    <p>
+      <strong>Updated:</strong>{" "}
+      {bus.updated_at
+        ? new Date(bus.updated_at).toLocaleTimeString()
+        : "N/A"}
+    </p>
+  </div>
+</Popup>
           </Marker>
         ))}
 
@@ -202,12 +241,24 @@ export default function AdminMap({
         position={[stop.lat, stop.lng]}
       >
         <Popup>
-          <strong>{stop.name}</strong>
-          <br />
-          Route: {route.routeName}
-          <br />
-          Stop #{stop.stopOrder}
-        </Popup>
+  <div className="space-y-1">
+    <h3 className="font-semibold">
+      📍 {stop.name}
+    </h3>
+
+    <p>
+      <strong>Route:</strong> {route.routeName}
+    </p>
+
+    <p>
+      <strong>Bus:</strong> {route.busNumber}
+    </p>
+
+    <p>
+      <strong>Stop Order:</strong> {stop.stopOrder}
+    </p>
+  </div>
+</Popup>
       </Marker>
     ))
   )}
