@@ -3,6 +3,9 @@
 import dynamic from "next/dynamic";
 import React, { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
+const StopPickerMap = dynamic(() => import("../components/StopPickerMap"), {
+  ssr: false,
+});
 
 const AdminMap = dynamic(() => import("@/components/AdminMap"), {
   ssr: false,
@@ -93,20 +96,47 @@ export default function AdminDashboard() {
   const [stops, setStops] = useState<Stop[]>([]);
   const [studentName, setStudentName] = useState("");
   const [parentName, setParentName] = useState("");
-const [parentEmail, setParentEmail] = useState("");
+  const [parentEmail, setParentEmail] = useState("");
   const [selectedStudentBus, setSelectedStudentBus] = useState("");
   const [selectedStop, setSelectedStop] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [liveBuses, setLiveBuses] = useState<LiveBus[]>([]);
+  const [allStops, setAllStops] = useState<StopItem[]>([]);
+
   type RouteMap = {
     busId: string;
     busNumber: string;
+    routeId: string;
     routeName: string;
     coordinates: [number, number][];
-};
 
-const [routeLines, setRouteLines] = useState<RouteMap[]>([]);
-  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceItem[]>([]);
+    stops: {
+      id: string;
+      name: string;
+      stopOrder: number;
+      lat: number;
+      lng: number;
+    }[];
+  };
+
+  type StopItem = {
+    id: string;
+    name: string;
+    route_name: string;
+    stop_order: number;
+    lat: number;
+    lng: number;
+  };
+
+  const [editingStop, setEditingStop] = useState<string | null>(null);
+
+const [editStopName, setEditStopName] = useState("");
+const [editStopOrder, setEditStopOrder] = useState("");
+
+  const [routeLines, setRouteLines] = useState<RouteMap[]>([]);
+  const [attendanceHistory, setAttendanceHistory] = useState<AttendanceItem[]>(
+    [],
+  );
   const [tripHistory, setTripHistory] = useState<[number, number][]>([]);
   const [selectedTripBus, setSelectedTripBus] = useState<string>("all");
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
@@ -123,13 +153,25 @@ const [routeLines, setRouteLines] = useState<RouteMap[]>([]);
   const [stopLat, setStopLat] = useState("");
   const [stopLng, setStopLng] = useState("");
   const [routes, setRoutes] = useState<{ id: string; name: string }[]>([]);
-const [selectedRoute, setSelectedRoute] = useState("");
+  const [selectedRoute, setSelectedRoute] = useState("");
   const [replayPosition, setReplayPosition] = useState<[number, number] | null>(
     null,
   );
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [school, setSchool] = useState<School | null>(null);
   const [selectedBusRoute, setSelectedBusRoute] = useState("");
+
+  const [editedLat, setEditedLat] = useState<number | null>(null);
+const [editedLng, setEditedLng] = useState<number | null>(null);
+
+const onStopMoved = (
+    stopId: string,
+    lat: number,
+    lng: number
+) => {
+    setEditedLat(lat);
+    setEditedLng(lng);
+};
 
   const fetchTripHistory = async (busId: string) => {
     try {
@@ -177,7 +219,6 @@ const [selectedRoute, setSelectedRoute] = useState("");
       const json = await res.json();
       setData(json);
 
-
       const assignRes = await fetch("/api/admin/assign-data");
       const assignJson = await assignRes.json();
       setDrivers(assignJson.drivers);
@@ -188,8 +229,8 @@ const [selectedRoute, setSelectedRoute] = useState("");
       setStops(studentJson.stops);
 
       const routesRes = await fetch("/api/admin/routes");
-const routesJson = await routesRes.json();
-setRoutes(routesJson);
+      const routesJson = await routesRes.json();
+      setRoutes(routesJson);
 
       const studentsRes = await fetch("/api/admin/students");
       const studentsJson = await studentsRes.json();
@@ -198,9 +239,9 @@ setRoutes(routesJson);
       const liveRes = await fetch("/api/admin/live-buses");
 
       const routesMapRes = await fetch("/api/admin/routes-map");
-const routesMapJson = await routesMapRes.json();
+      const routesMapJson = await routesMapRes.json();
 
-setRouteLines(routesMapJson);
+      setRouteLines(routesMapJson);
 
       const liveJson = await liveRes.json();
       setLiveBuses(liveJson);
@@ -213,14 +254,20 @@ setRouteLines(routesMapJson);
       setSchool(schoolJson);
 
       setAnalytics(analyticsJson);
+
+      const stopsRes = await fetch("/api/admin/stops");
+      const stopsJson = await stopsRes.json();
+
+      setAllStops(stopsJson);
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "Failed to fetch Dashboard");
+      setError(
+        error instanceof Error ? error.message : "Failed to fetch Dashboard",
+      );
     } finally {
       setLoading(false);
     }
   };
   useEffect(() => {
-    
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAttendance();
     fetchData();
@@ -228,12 +275,12 @@ setRouteLines(routesMapJson);
 
   useEffect(() => {
     if (selectedTripBus !== "all") {
-        fetchTripHistory(selectedTripBus);
+      fetchTripHistory(selectedTripBus);
     } else {
-        setTripHistory([]);
-        setReplayPosition(null);
+      setTripHistory([]);
+      setReplayPosition(null);
     }
-}, [selectedTripBus]);
+  }, [selectedTripBus]);
 
   const assignDriver = async () => {
     if (!selectedDriver || !selectedBus) {
@@ -248,14 +295,14 @@ setRouteLines(routesMapJson);
       });
       const json = await res.json();
 
-if (!res.ok) {
-    alert(json.error);
-    return;
-}
+      if (!res.ok) {
+        alert(json.error);
+        return;
+      }
 
-await fetchData();
+      await fetchData();
 
-alert(json.message);
+      alert(json.message);
     } catch (error) {
       console.error(error);
     }
@@ -263,40 +310,40 @@ alert(json.message);
 
   const addStudent = async () => {
     if (
-    !studentName ||
-    !parentName ||
-    !parentEmail ||
-    !selectedStudentBus ||
-    !selectedStop
-) {
-    alert("Fill all fields");
-    return;
-}
+      !studentName ||
+      !parentName ||
+      !parentEmail ||
+      !selectedStudentBus ||
+      !selectedStop
+    ) {
+      alert("Fill all fields");
+      return;
+    }
     try {
       const res = await fetch("/api/admin/add-student", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-    studentName,
-    parentName,
-    parentEmail,
-    busId: selectedStudentBus,
-    stopId: selectedStop,
-})
+          studentName,
+          parentName,
+          parentEmail,
+          busId: selectedStudentBus,
+          stopId: selectedStop,
+        }),
       });
 
       const json = await res.json();
       if (!res.ok) {
-      alert(json.error);
-      return;
+        alert(json.error);
+        return;
       }
-      
+
       await fetchData();
       setStudentName("");
-setParentName("");
-setParentEmail("");
-setSelectedStudentBus("");
-setSelectedStop("");
+      setParentName("");
+      setParentEmail("");
+      setSelectedStudentBus("");
+      setSelectedStop("");
       alert(json.message);
     } catch (error) {
       console.error(error);
@@ -333,10 +380,10 @@ setSelectedStop("");
       );
       setEditingStudent(null);
       setStudentName("");
-setParentName("");
-setParentEmail("");
-setSelectedStudentBus("");
-setSelectedStop("");
+      setParentName("");
+      setParentEmail("");
+      setSelectedStudentBus("");
+      setSelectedStop("");
     } catch (error) {
       console.error(error);
     }
@@ -367,63 +414,70 @@ setSelectedStop("");
   };
 
   const addBus = async () => {
-  try {
-    const res = await fetch("/api/admin/add-bus", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-    busNumber,
-    routeId: selectedBusRoute,
-})
-    });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      alert(json.error);
-      return;
-    }
-
-    await fetchData();
-
-    setBusNumber("");
-setSelectedBusRoute("");
-alert(json.message);
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-  const saveBus = async (busId: string) => {
     try {
-      const res = await fetch(`/api/admin/edit-bus/${busId}`, {
-    method: "PUT",
-    headers: {
-        "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-        driverId: selectedEditDriver,
-    }),
-});
+      const res = await fetch("/api/admin/add-bus", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          busNumber,
+          routeId: selectedBusRoute,
+        }),
+      });
 
-const json = await res.json();
+      const json = await res.json();
 
-if (!res.ok) {
-    alert(json.error);
-    return;
-}
+      if (!res.ok) {
+        alert(json.error);
+        return;
+      }
 
-await fetchData();
+      await fetchData();
 
-setEditingBus(null);
-
-alert(json.message);
+      setBusNumber("");
+      setSelectedBusRoute("");
+      alert(json.message);
     } catch (error) {
       console.error(error);
     }
   };
+
+  const saveBus = async (busId: string) => {
+    try {
+      const res = await fetch(`/api/admin/edit-bus/${busId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          driverId: selectedEditDriver,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error);
+        return;
+      }
+
+      await fetchData();
+
+      setEditingBus(null);
+
+      alert(json.message);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const filteredStops = selectedRoute
+  ? allStops.filter(
+      (stop) =>
+        routes.find((r) => r.id === selectedRoute)?.name === stop.route_name
+    )
+  : allStops;
 
   const addDriver = async () => {
     try {
@@ -444,9 +498,8 @@ alert(json.message);
         return;
       }
 
-      
       await fetchData();
-      
+
       setDriverName("");
       setDriverEmail("");
       setDriverPassword("");
@@ -458,46 +511,15 @@ alert(json.message);
   };
 
   const addRoute = async () => {
-  try {
-    const res = await fetch("/api/admin/add-route", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: routeName,
-      }),
-    });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      alert(json.error);
-      return;
-    }
-
-    
-    setRouteName("");
-    
-    await fetchData();
-    
-    alert(json.message);
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-  const addStop = async () => {
     try {
-      const res = await fetch("/api/admin/add-stop", {
+      const res = await fetch("/api/admin/add-route", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-    name: stopName,
-    routeId: selectedRoute,
-    lat: parseFloat(stopLat),
-    lng: parseFloat(stopLng),
-}),
+          name: routeName,
+        }),
       });
 
       const json = await res.json();
@@ -507,19 +529,113 @@ alert(json.message);
         return;
       }
 
-      
+      setRouteName("");
+
       await fetchData();
-      
-      setStopName("");
-      setStopLat("");
-      setStopLng("");
-      setSelectedRoute("");
-      
+
       alert(json.message);
     } catch (error) {
       console.error(error);
     }
   };
+
+  const addStop = async () => {
+    try {
+      if (!stopName || !selectedRoute || !stopLat || !stopLng) {
+        alert("Please fill all fields and select a location on the map.");
+        return;
+      }
+      const res = await fetch("/api/admin/add-stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: stopName,
+          routeId: selectedRoute,
+          lat: parseFloat(stopLat),
+          lng: parseFloat(stopLng),
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.error);
+        return;
+      }
+
+      await fetchData();
+
+      setStopName("");
+      setStopLat("");
+      setStopLng("");
+      setSelectedRoute("");
+
+      setStopLat("");
+      setStopLng("");
+      alert(json.message);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const deleteStop = async (id: string) => {
+  const confirmDelete = window.confirm(
+    "Are you sure you want to delete this stop?"
+  );
+
+  if (!confirmDelete) return;
+
+  try {
+    const res = await fetch(`/api/admin/delete-stop/${id}`, {
+      method: "DELETE",
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      alert(json.error);
+      return;
+    }
+
+    await fetchData();
+
+    alert(json.message);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const saveStop = async (id: string) => {
+  try {
+    const res = await fetch(`/api/admin/edit-stop/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+    name: editStopName,
+    stopOrder: Number(editStopOrder),
+    lat: editedLat,
+    lng: editedLng,
+}),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      alert(json.error);
+      return;
+    }
+
+    await fetchData();
+
+    setEditingStop(null);
+
+    alert(json.message);
+  } catch (error) {
+    console.error(error);
+  }
+};
 
   if (loading) {
     return (
@@ -544,13 +660,19 @@ alert(json.message);
   if (!data) {
     return (
       <main className="dashboard-shell flex min-h-screen items-center justify-center p-6">
-        <div className="dashboard-card px-6 py-5 text-slate-600">No data found.</div>
+        <div className="dashboard-card px-6 py-5 text-slate-600">
+          No data found.
+        </div>
       </main>
     );
   }
 
   const statCards = [
-    { label: "Active buses", value: analytics?.activeBuses ?? liveBuses.length, tone: "blue" },
+    {
+      label: "Active buses",
+      value: analytics?.activeBuses ?? liveBuses.length,
+      tone: "blue",
+    },
     { label: "Total drivers", value: data.totalDrivers, tone: "slate" },
     { label: "Students", value: data.totalStudents, tone: "amber" },
     { label: "Trips", value: analytics?.totalTrips ?? 0, tone: "green" },
@@ -562,20 +684,25 @@ alert(json.message);
         <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:block">
           <BrandLogo subtitle="Fleet operations" />
           <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
-            {["Overview", "Live Map", "Students", "Fleet", "Attendance"].map((item) => (
-              <a
-                key={item}
-                className="block rounded-lg px-3 py-2 hover:bg-slate-100 first:bg-slate-950 first:text-white"
-                href={`#${item.toLowerCase().replace(" ", "-")}`}
-              >
-                {item}
-              </a>
-            ))}
+            {["Overview", "Live Map", "Students", "Fleet", "Attendance"].map(
+              (item) => (
+                <a
+                  key={item}
+                  className="block rounded-lg px-3 py-2 hover:bg-slate-100 first:bg-slate-950 first:text-white"
+                  href={`#${item.toLowerCase().replace(" ", "-")}`}
+                >
+                  {item}
+                </a>
+              ),
+            )}
           </nav>
         </aside>
 
         <section className="flex min-w-0 flex-col gap-4">
-          <header id="overview" className="dashboard-card flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <header
+            id="overview"
+            className="dashboard-card flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+          >
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-600">
                 Admin Control Center
@@ -584,7 +711,8 @@ alert(json.message);
                 Transport Operations
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Live fleet visibility, attendance, route replay, and resource management.
+                Live fleet visibility, attendance, route replay, and resource
+                management.
               </p>
             </div>
             <span className="status-pill bg-green-50 text-green-700">
@@ -599,7 +727,9 @@ alert(json.message);
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
                   {stat.label}
                 </p>
-                <p className="mt-3 text-3xl font-bold text-slate-950">{stat.value}</p>
+                <p className="mt-3 text-3xl font-bold text-slate-950">
+                  {stat.value}
+                </p>
                 <div className="mt-4 h-1.5 rounded-full bg-slate-100">
                   <div
                     className={`h-1.5 rounded-full ${
@@ -618,13 +748,19 @@ alert(json.message);
             ))}
           </section>
 
-          <section id="live-map" className="grid gap-4 xl:grid-cols-[1fr_360px]">
+          <section
+            id="live-map"
+            className="grid gap-4 xl:grid-cols-[1fr_360px]"
+          >
             <div className="dashboard-card overflow-hidden">
               <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-950">Live tracking and replay</h2>
+                  <h2 className="text-lg font-bold text-slate-950">
+                    Live tracking and replay
+                  </h2>
                   <p className="text-sm text-slate-500">
-                    Active bus markers with trip history overlay and replay position.
+                    Active bus markers with trip history overlay and replay
+                    position.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -647,26 +783,36 @@ alert(json.message);
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
                 <AdminMap
-    buses={liveBuses}
-    routes={routeLines}
-    selectedBus={selectedTripBus}
-    tripHistory={tripHistory}
-    replayPosition={replayPosition}
-    school={school}
-/>
+                  buses={liveBuses}
+                  routes={routeLines}
+                  selectedBus={selectedTripBus}
+                  tripHistory={tripHistory}
+                  replayPosition={replayPosition}
+                  school={school}
+                />
               </div>
             </div>
 
             <aside className="dashboard-card p-5">
-              <h2 className="text-lg font-bold text-slate-950">Activity feed</h2>
+              <h2 className="text-lg font-bold text-slate-950">
+                Activity feed
+              </h2>
               <div className="mt-4 space-y-3">
                 {attendanceHistory.slice(0, 7).map((item, index) => (
-                  <div key={index} className="flex gap-3 border-b border-slate-100 pb-3 last:border-0">
-                    <span className={`mt-1 h-2.5 w-2.5 rounded-full ${item.status === "boarded" ? "bg-green-500" : "bg-amber-500"}`} />
+                  <div
+                    key={index}
+                    className="flex gap-3 border-b border-slate-100 pb-3 last:border-0"
+                  >
+                    <span
+                      className={`mt-1 h-2.5 w-2.5 rounded-full ${item.status === "boarded" ? "bg-green-500" : "bg-amber-500"}`}
+                    />
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-950">{item.student_name}</p>
+                      <p className="truncate font-semibold text-slate-950">
+                        {item.student_name}
+                      </p>
                       <p className="text-sm text-slate-500">
-                        {item.status === "boarded" ? "Boarded" : "Dropped"} on bus {item.bus_id}
+                        {item.status === "boarded" ? "Boarded" : "Dropped"} on
+                        bus {item.bus_id}
                       </p>
                       <p className="text-xs text-slate-400">
                         {new Date(item.updated_at).toLocaleString()}
@@ -685,9 +831,15 @@ alert(json.message);
 
           <section className="grid gap-4 xl:grid-cols-3">
             <div className="dashboard-card p-5">
-              <h2 className="text-lg font-bold text-slate-950">Assign driver</h2>
+              <h2 className="text-lg font-bold text-slate-950">
+                Assign driver
+              </h2>
               <div className="mt-4 space-y-3">
-                <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value)} className="field">
+                <select
+                  value={selectedDriver}
+                  onChange={(e) => setSelectedDriver(e.target.value)}
+                  className="field"
+                >
                   <option value="">Select driver</option>
                   {drivers.map((driver) => (
                     <option key={driver.id} value={driver.id}>
@@ -695,7 +847,11 @@ alert(json.message);
                     </option>
                   ))}
                 </select>
-                <select value={selectedBus} onChange={(e) => setSelectedBus(e.target.value)} className="field">
+                <select
+                  value={selectedBus}
+                  onChange={(e) => setSelectedBus(e.target.value)}
+                  className="field"
+                >
                   <option value="">Select bus</option>
                   {buses.map((bus) => (
                     <option key={bus.id} value={bus.id}>
@@ -703,45 +859,57 @@ alert(json.message);
                     </option>
                   ))}
                 </select>
-                <button onClick={assignDriver} className="btn btn-primary w-full">
+                <button
+                  onClick={assignDriver}
+                  className="btn btn-primary w-full"
+                >
                   Assign Driver
                 </button>
               </div>
             </div>
 
             <div className="dashboard-card p-5">
+              <h2 className="text-lg font-bold text-slate-950">Add Route</h2>
 
-  <h2 className="text-lg font-bold text-slate-950">
-    Add Route
-  </h2>
+              <div className="mt-4 space-y-3">
+                <input
+                  type="text"
+                  className="field"
+                  placeholder="Route Name"
+                  value={routeName}
+                  onChange={(e) => setRouteName(e.target.value)}
+                />
 
-  <div className="mt-4 space-y-3">
-
-    <input
-      type="text"
-      className="field"
-      placeholder="Route Name"
-      value={routeName}
-      onChange={(e) => setRouteName(e.target.value)}
-    />
-
-    <button
-      className="btn btn-primary w-full"
-      onClick={addRoute}
-    >
-      Add Route
-    </button>
-
-  </div>
-
-</div>
+                <button className="btn btn-primary w-full" onClick={addRoute}>
+                  Add Route
+                </button>
+              </div>
+            </div>
 
             <div className="dashboard-card p-5">
               <h2 className="text-lg font-bold text-slate-950">Add driver</h2>
               <div className="mt-4 space-y-3">
-                <input type="text" placeholder="Driver name" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="field" />
-                <input type="email" placeholder="Driver email" value={driverEmail} onChange={(e) => setDriverEmail(e.target.value)} className="field" />
-                <input type="password" placeholder="Password" value={driverPassword} onChange={(e) => setDriverPassword(e.target.value)} className="field" />
+                <input
+                  type="text"
+                  placeholder="Driver name"
+                  value={driverName}
+                  onChange={(e) => setDriverName(e.target.value)}
+                  className="field"
+                />
+                <input
+                  type="email"
+                  placeholder="Driver email"
+                  value={driverEmail}
+                  onChange={(e) => setDriverEmail(e.target.value)}
+                  className="field"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={driverPassword}
+                  onChange={(e) => setDriverPassword(e.target.value)}
+                  className="field"
+                />
                 <button className="btn btn-blue w-full" onClick={addDriver}>
                   Add Driver
                 </button>
@@ -751,55 +919,215 @@ alert(json.message);
             <div className="dashboard-card p-5">
               <h2 className="text-lg font-bold text-slate-950">Add stop</h2>
               <div className="mt-4 space-y-3">
-                <input type="text" placeholder="Stop name" value={stopName} onChange={(e) => setStopName(e.target.value)} className="field" />
+                <input
+                  type="text"
+                  placeholder="Stop name"
+                  value={stopName}
+                  onChange={(e) => setStopName(e.target.value)}
+                  className="field"
+                />
                 <select
-    value={selectedRoute}
-    onChange={(e) => setSelectedRoute(e.target.value)}
-    className="field"
->
-    <option value="">Select Route</option>
+                  value={selectedRoute}
+                  onChange={(e) => setSelectedRoute(e.target.value)}
+                  className="field"
+                >
+                  <option value="">Select Route</option>
 
-    {routes.map((route) => (
-        <option key={route.id} value={route.id}>
-            {route.name}
-        </option>
-    ))}
-</select>
+                  {routes.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.name}
+                    </option>
+                  ))}
+                </select>
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="number" placeholder="Latitude" value={stopLat} onChange={(e) => setStopLat(e.target.value)} className="field" />
-                  <input type="number" placeholder="Longitude" value={stopLng} onChange={(e) => setStopLng(e.target.value)} className="field" />
+                  <input
+                    type="number"
+                    placeholder="Latitude"
+                    value={stopLat}
+                    onChange={(e) => setStopLat(e.target.value)}
+                    className="field"
+                  />
+
+                  <input
+                    type="number"
+                    placeholder="Longitude"
+                    value={stopLng}
+                    onChange={(e) => setStopLng(e.target.value)}
+                    className="field"
+                  />
+                </div>
+
+                <div className="mt-3">
+                  <StopPickerMap
+  lat={stopLat}
+  lng={stopLng}
+  school={school}
+  selectedRoute={selectedRoute}
+  routes={routeLines}
+  editingStopId={editingStop}
+  editedLat={editedLat}
+    editedLng={editedLng}
+  onStopMoved={onStopMoved}
+  onLocationSelect={(lat, lng) => {
+    setStopLat(lat.toFixed(6));
+    setStopLng(lng.toFixed(6));
+  }}
+/>
                 </div>
                 <button className="btn btn-green w-full" onClick={addStop}>
                   Add Stop
                 </button>
               </div>
             </div>
+
+            <div className="dashboard-card p-5 mt-4">
+  <h2 className="text-lg font-bold">
+    Manage Stops
+  </h2>
+
+  <table className="ops-table mt-4">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Route</th>
+        <th>Order</th>
+        <th>Latitude</th>
+        <th>Longitude</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+
+    <tbody>
+
+      {filteredStops.map((stop) => (
+  <React.Fragment key={stop.id}>
+        <tr key={stop.id}>
+
+          <td>{stop.name}</td>
+
+          <td>{stop.route_name}</td>
+
+          <td>{stop.stop_order}</td>
+
+          <td>{stop.lat.toFixed(5)}</td>
+
+          <td>{stop.lng.toFixed(5)}</td>
+
+          <td>
+  <div className="flex gap-2">
+    <button
+  className="btn btn-soft min-h-9 px-3 py-1"
+  onClick={() => {
+  setEditingStop(stop.id);
+  setEditStopName(stop.name);
+  setEditStopOrder(String(stop.stop_order));
+
+  // NEW
+  setEditedLat(stop.lat);
+  setEditedLng(stop.lng);
+}}
+>
+  Edit
+</button>
+
+    <button
+      className="btn btn-red min-h-9 px-3 py-1"
+      onClick={() => deleteStop(stop.id)}
+    >
+      Delete
+    </button>
+  </div>
+</td>
+
+        </tr>
+    
+
+    {editingStop === stop.id && (
+      <tr>
+        <td colSpan={6} className="bg-slate-50">
+
+          <div className="grid gap-3 md:grid-cols-[1fr_120px_auto_auto]">
+
+            <input
+              className="field"
+              value={editStopName}
+              onChange={(e) => setEditStopName(e.target.value)}
+            />
+
+            <input
+              className="field"
+              type="number"
+              value={editStopOrder}
+              onChange={(e) => setEditStopOrder(e.target.value)}
+            />
+
+            <button
+              className="btn btn-green"
+              onClick={() => saveStop(stop.id)}
+            >
+              Save
+            </button>
+
+            <button
+              className="btn btn-soft"
+              onClick={() => setEditingStop(null)}
+            >
+              Cancel
+            </button>
+
+          </div>
+
+        </td>
+      </tr>
+    )}
+
+  </React.Fragment>
+))}
+
+    </tbody>
+
+  </table>
+</div>
           </section>
 
           <section id="students" className="dashboard-card p-5">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Student management</h2>
-                <p className="text-sm text-slate-500">Create, edit, and assign students to buses and stops.</p>
+                <h2 className="text-lg font-bold text-slate-950">
+                  Student management
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Create, edit, and assign students to buses and stops.
+                </p>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[180px_180px_220px_150px_150px_auto]">
-                <input type="text" placeholder="Student name" value={studentName} onChange={(e) => setStudentName(e.target.value)} className="field" />
                 <input
-    type="text"
-    placeholder="Parent Name"
-    value={parentName}
-    onChange={(e) => setParentName(e.target.value)}
-    className="field"
-/>
+                  type="text"
+                  placeholder="Student name"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  className="field"
+                />
+                <input
+                  type="text"
+                  placeholder="Parent Name"
+                  value={parentName}
+                  onChange={(e) => setParentName(e.target.value)}
+                  className="field"
+                />
 
-<input
-    type="email"
-    placeholder="Parent Email"
-    value={parentEmail}
-    onChange={(e) => setParentEmail(e.target.value)}
-    className="field"
-/>
-                <select value={selectedStudentBus} onChange={(e) => setSelectedStudentBus(e.target.value)} className="field">
+                <input
+                  type="email"
+                  placeholder="Parent Email"
+                  value={parentEmail}
+                  onChange={(e) => setParentEmail(e.target.value)}
+                  className="field"
+                />
+                <select
+                  value={selectedStudentBus}
+                  onChange={(e) => setSelectedStudentBus(e.target.value)}
+                  className="field"
+                >
                   <option value="">Bus</option>
                   {buses.map((bus) => (
                     <option key={bus.id} value={bus.id}>
@@ -807,7 +1135,11 @@ alert(json.message);
                     </option>
                   ))}
                 </select>
-                <select value={selectedStop} onChange={(e) => setSelectedStop(e.target.value)} className="field">
+                <select
+                  value={selectedStop}
+                  onChange={(e) => setSelectedStop(e.target.value)}
+                  className="field"
+                >
                   <option value="">Stop</option>
                   {stops.map((stop) => (
                     <option key={stop.id} value={stop.id}>
@@ -840,23 +1172,33 @@ alert(json.message);
                     {students.map((student) => (
                       <React.Fragment key={student.id}>
                         <tr>
-                          <td className="font-semibold">{student.student_name}</td>
+                          <td className="font-semibold">
+                            {student.student_name}
+                          </td>
                           <td>{student.parent_name}</td>
                           <td>{student.parent_email}</td>
                           <td>
-                            <span className="status-pill bg-blue-50 text-blue-700">{student.bus_number}</span>
+                            <span className="status-pill bg-blue-50 text-blue-700">
+                              {student.bus_number}
+                            </span>
                           </td>
                           <td>{student.stop_name}</td>
                           <td>
                             <div className="flex gap-2">
-                              <button className="btn btn-soft min-h-9 px-3 py-1" onClick={() => {
-                                setEditingStudent(student.id);
-                                setEditName(student.student_name);
-                                setEditBus(student.bus_id);
-                              }}>
+                              <button
+                                className="btn btn-soft min-h-9 px-3 py-1"
+                                onClick={() => {
+                                  setEditingStudent(student.id);
+                                  setEditName(student.student_name);
+                                  setEditBus(student.bus_id);
+                                }}
+                              >
                                 Edit
                               </button>
-                              <button className="btn btn-red min-h-9 px-3 py-1" onClick={() => deleteStudent(student.id)}>
+                              <button
+                                className="btn btn-red min-h-9 px-3 py-1"
+                                onClick={() => deleteStudent(student.id)}
+                              >
                                 Delete
                               </button>
                             </div>
@@ -866,8 +1208,17 @@ alert(json.message);
                           <tr>
                             <td colSpan={6} className="bg-slate-50">
                               <div className="grid gap-3 md:grid-cols-[1fr_180px_auto_auto]">
-                                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="field" />
-                                <select value={editBus} onChange={(e) => setEditBus(e.target.value)} className="field">
+                                <input
+                                  type="text"
+                                  value={editName}
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  className="field"
+                                />
+                                <select
+                                  value={editBus}
+                                  onChange={(e) => setEditBus(e.target.value)}
+                                  className="field"
+                                >
                                   <option value="">Select bus</option>
                                   {buses.map((bus) => (
                                     <option key={bus.id} value={bus.id}>
@@ -875,10 +1226,16 @@ alert(json.message);
                                     </option>
                                   ))}
                                 </select>
-                                <button className="btn btn-green" onClick={() => saveStudent(student)}>
+                                <button
+                                  className="btn btn-green"
+                                  onClick={() => saveStudent(student)}
+                                >
                                   Save
                                 </button>
-                                <button className="btn btn-soft" onClick={() => setEditingStudent(null)}>
+                                <button
+                                  className="btn btn-soft"
+                                  onClick={() => setEditingStudent(null)}
+                                >
                                   Cancel
                                 </button>
                               </div>
@@ -896,24 +1253,34 @@ alert(json.message);
           <section id="fleet" className="dashboard-card p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Fleet management</h2>
-                <p className="text-sm text-slate-500">Manage bus records and driver assignments.</p>
+                <h2 className="text-lg font-bold text-slate-950">
+                  Fleet management
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Manage bus records and driver assignments.
+                </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
-                <input type="text" value={busNumber} onChange={(e) => setBusNumber(e.target.value)} placeholder="Bus number" className="field" />
+                <input
+                  type="text"
+                  value={busNumber}
+                  onChange={(e) => setBusNumber(e.target.value)}
+                  placeholder="Bus number"
+                  className="field"
+                />
                 <select
-  value={selectedBusRoute}
-  onChange={(e) => setSelectedBusRoute(e.target.value)}
-  className="field"
->
-  <option value="">Select Route</option>
+                  value={selectedBusRoute}
+                  onChange={(e) => setSelectedBusRoute(e.target.value)}
+                  className="field"
+                >
+                  <option value="">Select Route</option>
 
-  {routes.map((route) => (
-    <option key={route.id} value={route.id}>
-      {route.name}
-    </option>
-  ))}
-</select>
+                  {routes.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.name}
+                    </option>
+                  ))}
+                </select>
                 <button className="btn btn-primary" onClick={addBus}>
                   Add Bus
                 </button>
@@ -925,30 +1292,51 @@ alert(json.message);
                 <p className="text-sm text-slate-500">No buses found.</p>
               ) : (
                 data.buses.map((bus) => (
-                  <div key={bus.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div
+                    key={bus.id}
+                    className="rounded-lg border border-slate-200 bg-white p-4"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-bold uppercase text-slate-400">Bus</p>
-                        <p className="text-xl font-bold text-slate-950">{bus.bus_number}</p>
+                        <p className="text-xs font-bold uppercase text-slate-400">
+                          Bus
+                        </p>
+                        <p className="text-xl font-bold text-slate-950">
+                          {bus.bus_number}
+                        </p>
                         <p className="mt-1 text-sm text-slate-500">
                           {bus.driver_name || "Not assigned"}
                         </p>
                       </div>
-                      <span className={`status-pill ${bus.driver_name ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                      <span
+                        className={`status-pill ${bus.driver_name ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+                      >
                         {bus.driver_name ? "Assigned" : "Open"}
                       </span>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <button className="btn btn-soft min-h-9 px-3 py-1" onClick={() => setEditingBus(bus.id)}>
+                      <button
+                        className="btn btn-soft min-h-9 px-3 py-1"
+                        onClick={() => setEditingBus(bus.id)}
+                      >
                         Edit
                       </button>
-                      <button className="btn btn-red min-h-9 px-3 py-1" onClick={() => deleteBus(bus.id)}>
+                      <button
+                        className="btn btn-red min-h-9 px-3 py-1"
+                        onClick={() => deleteBus(bus.id)}
+                      >
                         Delete
                       </button>
                     </div>
                     {editingBus === bus.id && (
                       <div className="mt-4 flex gap-2">
-                        <select value={selectedEditDriver} onChange={(e) => setSelectedEditDriver(e.target.value)} className="field">
+                        <select
+                          value={selectedEditDriver}
+                          onChange={(e) =>
+                            setSelectedEditDriver(e.target.value)
+                          }
+                          className="field"
+                        >
                           <option value="">Select driver</option>
                           {drivers.map((driver) => (
                             <option key={driver.id} value={driver.id}>
@@ -956,7 +1344,10 @@ alert(json.message);
                             </option>
                           ))}
                         </select>
-                        <button className="btn btn-green" onClick={() => saveBus(bus.id)}>
+                        <button
+                          className="btn btn-green"
+                          onClick={() => saveBus(bus.id)}
+                        >
                           Save
                         </button>
                       </div>
@@ -968,7 +1359,9 @@ alert(json.message);
           </section>
 
           <section id="attendance" className="dashboard-card p-5">
-            <h2 className="text-lg font-bold text-slate-950">Attendance history</h2>
+            <h2 className="text-lg font-bold text-slate-950">
+              Attendance history
+            </h2>
             <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
               <table className="ops-table">
                 <thead>
@@ -985,7 +1378,9 @@ alert(json.message);
                     <tr key={index}>
                       <td className="font-semibold">{item.student_name}</td>
                       <td>
-                        <span className={`status-pill ${item.status === "boarded" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                        <span
+                          className={`status-pill ${item.status === "boarded" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
+                        >
                           {item.status === "boarded" ? "Boarded" : "Dropped"}
                         </span>
                       </td>

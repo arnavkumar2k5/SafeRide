@@ -1,18 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import {authOptions} from "../../auth/[...nextauth]/route"
+import { authOptions } from "../../auth/[...nextauth]/route";
 import pool from "@/lib/db";
-
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const school = await pool.query(
@@ -21,7 +17,7 @@ export async function GET() {
       FROM users
       WHERE email=$1
       `,
-      [session.user.email]
+      [session.user.email],
     );
 
     if (school.rows.length === 0) {
@@ -35,11 +31,13 @@ export async function GET() {
       SELECT
     b.id AS bus_id,
     b.bus_number,
+    r.id AS route_id,
     r.name AS route_name,
-    s.name AS stop_name,
-        ST_Y(s.location::geometry) AS lat,
-        ST_X(s.location::geometry) AS lng,
-        s.stop_order
+    s.id AS stop_id,
+s.name AS stop_name,
+ST_Y(s.location::geometry) AS lat,
+    ST_X(s.location::geometry) AS lng,
+    s.stop_order
       FROM buses b
       JOIN routes r
         ON b.route_id = r.id
@@ -50,7 +48,7 @@ export async function GET() {
         b.bus_number,
         s.stop_order
       `,
-      [schoolId]
+      [schoolId],
     );
 
     const routes: Record<string, any> = {};
@@ -58,25 +56,27 @@ export async function GET() {
     for (const row of result.rows) {
       if (!routes[row.bus_id]) {
         routes[row.bus_id] = {
-  busId: row.bus_id,
-  busNumber: row.bus_number,
-  routeName: row.route_name,
-  coordinates: [],
-  stops: [],
-};
+          busId: row.bus_id,
+          busNumber: row.bus_number,
+          routeId: row.route_id,
+          routeName: row.route_name,
+          coordinates: [],
+          stops: [],
+        };
       }
 
       const lat = Number(row.lat);
-const lng = Number(row.lng);
+      const lng = Number(row.lng);
 
-routes[row.bus_id].coordinates.push([lat, lng]);
+      routes[row.bus_id].coordinates.push([lat, lng]);
 
-routes[row.bus_id].stops.push({
-  name: row.stop_name,
-  stopOrder: row.stop_order,
-  lat,
-  lng,
-});
+      routes[row.bus_id].stops.push({
+        id: row.stop_id,
+        name: row.stop_name,
+        stopOrder: row.stop_order,
+        lat,
+        lng,
+      });
     }
 
     return NextResponse.json(Object.values(routes));
@@ -85,7 +85,7 @@ routes[row.bus_id].stops.push({
 
     return NextResponse.json(
       { error: "Failed to load routes" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
