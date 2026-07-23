@@ -25,6 +25,19 @@ export async function GET() {
     }
 
     const schoolId = school.rows[0].school_id;
+    const schoolLocation = await pool.query(
+  `
+  SELECT
+    latitude,
+    longitude
+  FROM schools
+  WHERE id = $1
+  `,
+  [schoolId]
+);
+
+const schoolLat = Number(schoolLocation.rows[0].latitude);
+const schoolLng = Number(schoolLocation.rows[0].longitude);
 
     const result = await pool.query(
       `
@@ -56,13 +69,13 @@ ST_Y(s.location::geometry) AS lat,
     for (const row of result.rows) {
       if (!routes[row.bus_id]) {
         routes[row.bus_id] = {
-          busId: row.bus_id,
-          busNumber: row.bus_number,
-          routeId: row.route_id,
-          routeName: row.route_name,
-          coordinates: [],
-          stops: [],
-        };
+  busId: row.bus_id,
+  busNumber: row.bus_number,
+  routeId: row.route_id,
+  routeName: row.route_name,
+  coordinates: [[schoolLat, schoolLng]],
+  stops: [],
+};
       }
 
       const lat = Number(row.lat);

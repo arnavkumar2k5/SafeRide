@@ -20,8 +20,8 @@ type School = {
 type Stop = {
   id: string;
   name: string;
-  latitude: number;
-  longitude: number;
+  lat: number;
+  lng: number;
 };
 
 const DriverMap = dynamic(() => import("@/components/DriverMap"), {
@@ -254,7 +254,7 @@ export default function DriverDashboard() {
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-slate-950">{stop.name}</p>
                           <p className="text-xs text-slate-500">
-                            {stop.latitude}, {stop.longitude}
+                            {stop.lat}, {stop.lng}
                           </p>
                         </div>
                       </div>

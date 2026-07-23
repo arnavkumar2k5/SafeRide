@@ -61,22 +61,14 @@ export async function GET() {
       await pool.query(
         `
         SELECT DISTINCT
-
-          stops.id,
-
-          stops.name,
-
-          stops.latitude,
-
-          stops.longitude
-
-        FROM students
-
-        JOIN stops
-        ON students.stop_id
-          = stops.id
-
-        WHERE students.bus_id=$1
+    stops.id,
+    stops.name,
+    ST_Y(stops.location::geometry) AS lat,
+    ST_X(stops.location::geometry) AS lng
+FROM students
+JOIN stops
+ON students.stop_id = stops.id
+WHERE students.bus_id = $1;
         `,
         [busId]
       );

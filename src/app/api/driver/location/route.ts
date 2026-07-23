@@ -33,7 +33,7 @@ export async function POST(req: Request){
   `INSERT INTO bus_locations (bus_id, location, speed, updated_at)
    VALUES (
       $1,
-      ST_SetSRID(ST_MakePoint($3, $2), 4326),
+      ST_SetSRID(ST_MakePoint($3, $2), 4326)::geography,
       $4,
       NOW()
    )
@@ -57,9 +57,8 @@ const studentsResult =
       stops.name
       AS stop_name,
 
-      stops.latitude,
-
-      stops.longitude
+      ST_Y(stops.location::geometry) AS lat,
+ST_X(stops.location::geometry) AS lng
 
     FROM students
 
@@ -75,22 +74,16 @@ const studentsResult =
 studentsResult.rows.forEach(
   (student) => {
 
-    const distance =
-      getDistance(
-
-        {
-          latitude: lat,
-          longitude: lng,
-        },
-
-        {
-          latitude:
-            student.latitude,
-
-          longitude:
-            student.longitude,
-        }
-      );
+    const distance = getDistance(
+    {
+        latitude: lat,
+        longitude: lng,
+    },
+    {
+        latitude: student.lat,
+        longitude: student.lng,
+    }
+);
 
     console.log(
       `Distance to ${student.stop_name}:`,
@@ -99,22 +92,16 @@ studentsResult.rows.forEach(
 
     if (distance < 100 && distance > 30) {
 
-      (global as any).io.emit(
-        "bus-near-stop",
-        {
+      const io = (global as any).io;
 
-          studentId:
-            student.id,
-
-          studentName:
-            student.name,
-
-          stopName:
-            student.stop_name,
-
-          distance,
-        }
-      );
+if (io && distance < 100 && distance > 30) {
+  io.emit("bus-near-stop", {
+    studentId: student.id,
+    studentName: student.name,
+    stopName: student.stop_name,
+    distance,
+  });
+}
     }
   }
 );

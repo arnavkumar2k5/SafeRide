@@ -23,8 +23,8 @@ L.Icon.Default.mergeOptions({
 type Stop = {
   id: string;
   name: string;
-  latitude: number;
-  longitude: number;
+  lat: number;
+  lng: number;
 };
 
 type Props = {
@@ -43,9 +43,12 @@ export default function DriverMap({ location, stops, school }: Props) {
   if (!school) return null;
 
   const route: [number, number][] = [
-    [school.latitude, school.longitude],
-    ...stops.map((stop): [number, number] => [stop.latitude, stop.longitude]),
-  ];
+  [school.latitude, school.longitude],
+  ...stops.map((stop): [number, number] => [
+    stop.lat,
+    stop.lng,
+  ]),
+];
 
   return (
     <MapContainer
@@ -64,7 +67,7 @@ export default function DriverMap({ location, stops, school }: Props) {
 
       {Array.isArray(stops) &&
         stops.map((stop) => (
-          <Marker key={stop.id} position={[stop.latitude, stop.longitude]}>
+          <Marker key={stop.id} position={[stop.lat, stop.lng]}>
             <Popup>Stop: {stop.name}</Popup>
           </Marker>
         ))}
