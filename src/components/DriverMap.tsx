@@ -37,9 +37,41 @@ type Props = {
     latitude: number;
     longitude: number;
   } | null;
+  completedStops: string[];
 };
 
-export default function DriverMap({ location, stops, school }: Props) {
+const busIcon = new L.Icon({
+  iconUrl: "/icons/bus.svg",
+  iconSize: [40, 40],
+  iconAnchor: [20, 40],
+  popupAnchor: [0, -40],
+});
+
+const schoolIcon = new L.Icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/167/167707.png",
+  iconSize: [40, 40],
+  iconAnchor: [20, 40],
+  popupAnchor: [0, -40],
+});
+
+const pendingStopIcon = new L.Icon({
+  iconUrl: "/icons/stop-pending.svg",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+const completedStopIcon = new L.Icon({
+  iconUrl: "/icons/stop-completed.svg",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+});
+
+export default function DriverMap({
+  location,
+  stops,
+  school,
+  completedStops,
+}: Props)  {
   if (!school) return null;
 
   const route: [number, number][] = [
@@ -61,19 +93,33 @@ export default function DriverMap({ location, stops, school }: Props) {
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <Marker position={[school.latitude, school.longitude]}>
+      <Marker
+  position={[school.latitude, school.longitude]}
+  icon={schoolIcon}
+>
         <Popup>School campus</Popup>
       </Marker>
 
       {Array.isArray(stops) &&
         stops.map((stop) => (
-          <Marker key={stop.id} position={[stop.lat, stop.lng]}>
-            <Popup>Stop: {stop.name}</Popup>
-          </Marker>
+          <Marker
+  key={stop.id}
+  position={[stop.lat, stop.lng]}
+  icon={
+    completedStops.includes(stop.id)
+      ? completedStopIcon
+      : pendingStopIcon
+  }
+>
+  <Popup>{stop.name}</Popup>
+</Marker>
         ))}
 
       {location && (
-        <Marker position={[location.lat, location.lng]}>
+        <Marker
+  position={[location.lat, location.lng]}
+  icon={busIcon}
+>
           <Popup>Live bus</Popup>
         </Marker>
       )}

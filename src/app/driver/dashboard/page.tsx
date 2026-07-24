@@ -36,6 +36,7 @@ export default function DriverDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [school, setSchool] = useState<School | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
+  const [completedStops, setCompletedStops] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -116,6 +117,7 @@ export default function DriverDashboard() {
       );
     }
 
+    
     return () => {
       if (watchId) {
         navigator.geolocation.clearWatch(watchId);
@@ -123,7 +125,29 @@ export default function DriverDashboard() {
     };
   }, [tracking]);
 
-  const markStudent = async (student: Student, status: "boarded" | "dropped") => {
+  function interpolatePoints(
+    start: { lat: number; lng: number },
+    end: { lat: number; lng: number },
+    steps = 40,
+  ) {
+    const points = [];
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+
+      points.push({
+        lat: start.lat + (end.lat - start.lat) * t,
+        lng: start.lng + (end.lng - start.lng) * t,
+      });
+    }
+
+    return points;
+  }
+
+  const markStudent = async (
+    student: Student,
+    status: "boarded" | "dropped",
+  ) => {
     try {
       await fetch("/api/driver/student-status", {
         method: "POST",
@@ -146,19 +170,103 @@ export default function DriverDashboard() {
     }
   };
 
+  const startSimulation = async () => {
+  if (!school || stops.length === 0) return;
+  setCompletedStops([]);
+
+  const schoolPoint = {
+  lat: school.latitude,
+  lng: school.longitude,
+};
+
+const route = [
+  schoolPoint,
+  ...stops.map((stop) => ({
+    lat: stop.lat,
+    lng: stop.lng,
+  })),
+  schoolPoint, // Return to school
+];
+
+  let path: { lat: number; lng: number }[] = [];
+
+  for (let i = 0; i < route.length - 1; i++) {
+    path.push(
+      ...interpolatePoints(route[i], route[i + 1], 80)
+    );
+  }
+
+  let index = 0;
+
+  const timer = setInterval(async () => {
+    if (index >= path.length) {
+      clearInterval(timer);
+      alert("Simulation Complete!");
+      return;
+    }
+
+    const point = path[index];
+
+    setLocation(point);
+
+    stops.forEach((stop) => {
+  const distance =
+    Math.sqrt(
+      Math.pow(point.lat - stop.lat, 2) +
+      Math.pow(point.lng - stop.lng, 2)
+    );
+
+  if (distance < 0.0002) {
+    setCompletedStops((prev) =>
+      prev.includes(stop.id) ? prev : [...prev, stop.id]
+    );
+  }
+});
+
+    try {
+      await fetch("/api/driver/location", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lat: point.lat,
+          lng: point.lng,
+          speed: 35,
+        }),
+      });
+
+      socket.emit("bus-location", point);
+    } catch (err) {
+      console.error(err);
+    }
+
+    index++;
+  }, 300);
+};
+
   return (
     <main className="dashboard-shell">
       <div className="mx-auto grid min-h-screen w-full max-w-7xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[260px_1fr] lg:px-8">
         <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:block">
           <BrandLogo subtitle="Driver console" />
           <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
-            <a className="block rounded-lg bg-slate-950 px-3 py-2 text-white" href="#route">
+            <a
+              className="block rounded-lg bg-slate-950 px-3 py-2 text-white"
+              href="#route"
+            >
               Route map
             </a>
-            <a className="block rounded-lg px-3 py-2 hover:bg-slate-100" href="#students">
+            <a
+              className="block rounded-lg px-3 py-2 hover:bg-slate-100"
+              href="#students"
+            >
               Student stops
             </a>
-            <a className="block rounded-lg px-3 py-2 hover:bg-slate-100" href="#location">
+            <a
+              className="block rounded-lg px-3 py-2 hover:bg-slate-100"
+              href="#location"
+            >
               Location status
             </a>
           </nav>
@@ -181,8 +289,13 @@ export default function DriverDashboard() {
               className={`btn ${tracking ? "btn-red" : "btn-blue"} w-full sm:w-auto`}
               onClick={() => setTracking(!tracking)}
             >
-              <span className={`h-2.5 w-2.5 rounded-full ${tracking ? "bg-white" : "bg-blue-200"}`} />
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${tracking ? "bg-white" : "bg-blue-200"}`}
+              />
               {tracking ? "Stop Tracking" : "Start Tracking"}
+            </button>
+            <button className="btn btn-green" onClick={startSimulation}>
+              Start Simulation
             </button>
           </header>
 
@@ -190,47 +303,67 @@ export default function DriverDashboard() {
             <section id="route" className="dashboard-card overflow-hidden">
               <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-950">Assigned route</h2>
+                  <h2 className="text-lg font-bold text-slate-950">
+                    Assigned route
+                  </h2>
                   <p className="text-sm text-slate-500">
                     School origin, planned stops, and live driver position.
                   </p>
                 </div>
                 <span
                   className={`status-pill ${
-                    tracking ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-600"
+                    tracking
+                      ? "bg-green-50 text-green-700"
+                      : "bg-slate-100 text-slate-600"
                   }`}
                 >
-                  <span className={`h-2 w-2 rounded-full ${tracking ? "bg-green-500" : "bg-slate-400"}`} />
+                  <span
+                    className={`h-2 w-2 rounded-full ${tracking ? "bg-green-500" : "bg-slate-400"}`}
+                  />
                   {tracking ? "Broadcasting" : "Idle"}
                 </span>
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
-                <DriverMap location={location} stops={stops} school={school} />
+                <DriverMap location={location} stops={stops} school={school} completedStops={completedStops}/>
               </div>
             </section>
 
             <aside className="flex flex-col gap-4">
               <div id="location" className="dashboard-card p-5">
-                <h2 className="text-lg font-bold text-slate-950">Driver status</h2>
+                <h2 className="text-lg font-bold text-slate-950">
+                  Driver status
+                </h2>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="dashboard-card-muted p-3">
-                    <p className="text-xs font-bold uppercase text-slate-400">Stops</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-950">{stops.length}</p>
+                    <p className="text-xs font-bold uppercase text-slate-400">
+                      Stops
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-slate-950">
+                      {stops.length}
+                    </p>
                   </div>
                   <div className="dashboard-card-muted p-3">
-                    <p className="text-xs font-bold uppercase text-slate-400">Students</p>
-                    <p className="mt-1 text-2xl font-bold text-slate-950">{students.length}</p>
+                    <p className="text-xs font-bold uppercase text-slate-400">
+                      Students
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-slate-950">
+                      {students.length}
+                    </p>
                   </div>
                 </div>
                 {location ? (
                   <dl className="mt-4 space-y-3 text-sm">
                     <div className="flex justify-between gap-4">
                       <dt className="text-slate-500">Latitude</dt>
-                      <dd className="font-semibold text-slate-950">{location.lat.toFixed(6)}</dd>
+                      <dd className="font-semibold text-slate-950">
+                        {location.lat.toFixed(6)}
+                      </dd>
                     </div>
                     <div className="flex justify-between gap-4">
                       <dt className="text-slate-500">Longitude</dt>
-                      <dd className="font-semibold text-slate-950">{location.lng.toFixed(6)}</dd>
+                      <dd className="font-semibold text-slate-950">
+                        {location.lng.toFixed(6)}
+                      </dd>
                     </div>
                   </dl>
                 ) : (
@@ -241,10 +374,14 @@ export default function DriverDashboard() {
               </div>
 
               <div className="dashboard-card p-5">
-                <h2 className="text-lg font-bold text-slate-950">Stop progression</h2>
+                <h2 className="text-lg font-bold text-slate-950">
+                  Stop progression
+                </h2>
                 <div className="mt-4 space-y-3">
                   {stops.length === 0 ? (
-                    <p className="text-sm text-slate-500">No route stops assigned.</p>
+                    <p className="text-sm text-slate-500">
+                      No route stops assigned.
+                    </p>
                   ) : (
                     stops.map((stop, index) => (
                       <div key={stop.id} className="flex items-center gap-3">
@@ -252,7 +389,9 @@ export default function DriverDashboard() {
                           {index + 1}
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-950">{stop.name}</p>
+                          <p className="truncate font-semibold text-slate-950">
+                            {stop.name}
+                          </p>
                           <p className="text-xs text-slate-500">
                             {stop.lat}, {stop.lng}
                           </p>
@@ -268,10 +407,16 @@ export default function DriverDashboard() {
           <section id="students" className="dashboard-card p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-950">Student manifest</h2>
-                <p className="text-sm text-slate-500">Mark pickup and drop-off events in real time.</p>
+                <h2 className="text-lg font-bold text-slate-950">
+                  Student manifest
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Mark pickup and drop-off events in real time.
+                </p>
               </div>
-              <span className="status-pill bg-amber-50 text-amber-700">{students.length} assigned</span>
+              <span className="status-pill bg-amber-50 text-amber-700">
+                {students.length} assigned
+              </span>
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
@@ -287,13 +432,21 @@ export default function DriverDashboard() {
                   >
                     <div>
                       <p className="font-bold text-slate-950">{student.name}</p>
-                      <p className="text-sm text-slate-500">Student ID {student.id}</p>
+                      <p className="text-sm text-slate-500">
+                        Student ID {student.id}
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
-                      <button className="btn btn-green" onClick={() => markStudent(student, "boarded")}>
+                      <button
+                        className="btn btn-green"
+                        onClick={() => markStudent(student, "boarded")}
+                      >
                         Picked Up
                       </button>
-                      <button className="btn btn-red" onClick={() => markStudent(student, "dropped")}>
+                      <button
+                        className="btn btn-red"
+                        onClick={() => markStudent(student, "dropped")}
+                      >
                         Dropped
                       </button>
                     </div>
