@@ -44,31 +44,18 @@ WHERE buses.school_id = $1
       [schoolId]
     );
 
-    // BOARDED
-    const boarded = await pool.query(
-      `
-      SELECT COUNT(*)
-      FROM student_status
-      JOIN students
-        ON student_status.student_id = students.id
-      WHERE student_status.status = 'boarded'
-      AND students.school_id = $1
-      `,
-      [schoolId]
-    );
 
-    // DROPPED
-    const dropped = await pool.query(
-      `
-      SELECT COUNT(*)
-      FROM student_status
-      JOIN students
-        ON student_status.student_id = students.id
-      WHERE student_status.status = 'dropped'
-      AND students.school_id = $1
-      `,
-      [schoolId]
-    );
+const attendance = await pool.query(
+  `
+  SELECT
+      COUNT(*) FILTER (WHERE status = 'boarded') AS boarded,
+      COUNT(*) FILTER (WHERE status = 'dropped') AS dropped
+  FROM trip_attendance
+  WHERE school_id = $1
+    AND trip_date = CURRENT_DATE
+  `,
+  [schoolId]
+);
 
     // ACTIVE BUSES
     const activeBuses = await pool.query(
@@ -83,11 +70,11 @@ WHERE buses.school_id = $1
     );
 
     return NextResponse.json({
-      totalTrips: trips.rows[0].count,
-      boarded: boarded.rows[0].count,
-      dropped: dropped.rows[0].count,
-      activeBuses: activeBuses.rows[0].count,
-    });
+  totalTrips: trips.rows[0].count,
+  boarded: attendance.rows[0].boarded,
+  dropped: attendance.rows[0].dropped,
+  activeBuses: activeBuses.rows[0].count,
+});
 
   } catch (error) {
     console.error(error);

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import React, { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
+import { socket } from "@/lib/socket";
 const StopPickerMap = dynamic(() => import("../components/StopPickerMap"), {
   ssr: false,
 });
@@ -272,6 +273,23 @@ const onStopMoved = (
     fetchAttendance();
     fetchData();
   }, []);
+
+  useEffect(() => {
+  socket.on("attendance-update", () => {
+    console.log("Attendance updated");
+    fetchAttendance();
+    fetchData();
+  });
+
+  socket.on("bus-location-update", () => {
+    fetchData();
+  });
+
+  return () => {
+    socket.off("attendance-update");
+    socket.off("bus-location-update");
+  };
+}, []);
 
   useEffect(() => {
     if (selectedTripBus !== "all") {

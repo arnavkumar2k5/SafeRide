@@ -2,10 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import io from "socket.io-client";
 import { BrandLogo } from "@/components/BrandLogo";
-
-const socket = io("https://safe-ride-weld.vercel.app/");
+import { socket } from "@/lib/socket";
 
 const Map = dynamic(() => import("@/components/Map"), {
   ssr: false,
@@ -223,25 +221,30 @@ export default function ParentDashboard() {
       showNotification("Bus Near Stop", `Bus is near ${data.stopName}`);
     });
 
-    socket.on("student-status-update", (liveData: StudentStatusEvent) => {
-      showNotification("Student Update", `${liveData.studentName} ${liveData.status}`);
-      setStudentNotification({
-        name: liveData.studentName,
-        status: liveData.status,
-      });
-      setHistory((prev) => [
-        {
-          status: liveData.status,
-          updated_at: new Date(),
-        },
-        ...prev,
-      ]);
-    });
+    socket.on("attendance-update", (liveData: StudentStatusEvent) => {
+  showNotification(
+    "Student Update",
+    `${liveData.studentName} ${liveData.status}`
+  );
+
+  setStudentNotification({
+    name: liveData.studentName,
+    status: liveData.status,
+  });
+
+  setHistory((prev) => [
+    {
+      status: liveData.status,
+      updated_at: new Date(),
+    },
+    ...prev,
+  ]);
+});
 
     return () => {
       socket.off("bus-location-update");
       socket.off("bus-near-stop");
-      socket.off("student-status-update");
+      socket.off("attendance-update");
     };
     // The socket subscriptions intentionally match the original mount-only flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps

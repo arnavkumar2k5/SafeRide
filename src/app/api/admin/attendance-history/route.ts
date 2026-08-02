@@ -33,34 +33,42 @@ export async function GET() {
     const schoolId = admin.rows[0].school_id;
 
     const result = await pool.query(
-      `
-      SELECT
-        students.name AS student_name,
-        student_status.status,
-        student_status.updated_at,
+  `
+  SELECT
+      s.name AS student_name,
 
-        buses.id AS bus_id,
-        buses.bus_number,
+      ta.status,
 
-        users.name AS driver_name
+      ta.trip_date,
 
-      FROM student_status
+      ta.pickup_time,
 
-      JOIN students
-        ON student_status.student_id = students.id
+      ta.drop_time,
 
-      JOIN buses
-        ON students.bus_id = buses.id
+      b.id AS bus_id,
 
-      LEFT JOIN users
-        ON buses.driver_id = users.id
+      b.bus_number,
 
-      WHERE students.school_id = $1
+      u.name AS driver_name
 
-      ORDER BY student_status.updated_at DESC
-      `,
-      [schoolId]
-    );
+  FROM trip_attendance ta
+
+  JOIN students s
+  ON ta.student_id = s.id
+
+  JOIN buses b
+  ON ta.bus_id = b.id
+
+  LEFT JOIN users u
+  ON ta.driver_id = u.id
+
+  WHERE ta.school_id = $1
+
+  ORDER BY ta.trip_date DESC,
+           COALESCE(ta.drop_time, ta.pickup_time, ta.created_at) DESC
+  `,
+  [schoolId]
+);
 
     return NextResponse.json(result.rows);
 

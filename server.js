@@ -21,6 +21,8 @@ app.prepare().then(() => {
     },
   });
 
+  global.io = io;
+
   io.on("connection", (socket) => {
     console.log("Socket connected", socket.id);
 
@@ -29,22 +31,11 @@ app.prepare().then(() => {
 
       io.emit("bus-location-update", data);
     });
-    socket.on(
-  "student-status",
+    socket.on("attendance-update", (data) => {
+  console.log("Attendance:", data);
 
-  (data) => {
-
-    console.log(
-      "Student Status:",
-      data
-    );
-
-    io.emit(
-      "student-status-update",
-      data
-    );
-  }
-);
+  io.emit("attendance-update", data);
+});
     socket.on("disconnect", () => {
       console.log("Socket Disconnected:", socket.id);
     });

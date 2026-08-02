@@ -2,14 +2,20 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import io from "socket.io-client";
+import { socket } from "@/lib/socket";
 import { BrandLogo } from "@/components/BrandLogo";
 
-const socket = io("https://safe-ride-weld.vercel.app/");
 
 type Student = {
   id: string;
-  name: string;
+  student_id: string;
+  student_name: string;
+  stop_name: string;
+
+  status: "waiting" | "boarded" | "dropped";
+
+  pickup_time: string | null;
+  drop_time: string | null;
 };
 
 type School = {
@@ -38,16 +44,16 @@ export default function DriverDashboard() {
   const [stops, setStops] = useState<Stop[]>([]);
   const [completedStops, setCompletedStops] = useState<string[]>([]);
 
+  const fetchStudents = async () => {
+    try {
+      const res = await fetch("/api/driver/today");
+      const data = await res.json();
+      setStudents(data);
+    } catch (error) {
+      console.error(error);
+    }
+  };
   useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const res = await fetch("/api/driver/students");
-        const data = await res.json();
-        setStudents(data);
-      } catch (error) {
-        console.error(error);
-      }
-    };
 
     fetchStudents();
 
@@ -117,7 +123,6 @@ export default function DriverDashboard() {
       );
     }
 
-    
     return () => {
       if (watchId) {
         navigator.geolocation.clearWatch(watchId);
@@ -144,106 +149,115 @@ export default function DriverDashboard() {
     return points;
   }
 
-  const markStudent = async (
-    student: Student,
-    status: "boarded" | "dropped",
-  ) => {
-    try {
-      await fetch("/api/driver/student-status", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          studentId: student.id,
-          status,
-        }),
-      });
+  const pickupStudent = async (attendanceId: string) => {
+  await fetch("/api/driver/pickup", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      attendanceId,
+    }),
+  });
 
-      socket.emit("student-status", {
-        studentId: student.id,
-        studentName: student.name,
-        status,
-      });
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  fetchStudents();
+};
+
+const dropStudent = async (attendanceId: string) => {
+  await fetch("/api/driver/drop", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      attendanceId,
+    }),
+  });
+
+  fetchStudents();
+};
 
   const startSimulation = async () => {
-  if (!school || stops.length === 0) return;
-  setCompletedStops([]);
+    if (!school || stops.length === 0) return;
+    setCompletedStops([]);
 
-  const schoolPoint = {
-  lat: school.latitude,
-  lng: school.longitude,
-};
+    const schoolPoint = {
+      lat: school.latitude,
+      lng: school.longitude,
+    };
 
-const route = [
-  schoolPoint,
-  ...stops.map((stop) => ({
-    lat: stop.lat,
-    lng: stop.lng,
-  })),
-  schoolPoint, // Return to school
-];
+    const route = [
+      schoolPoint,
+      ...stops.map((stop) => ({
+        lat: stop.lat,
+        lng: stop.lng,
+      })),
+      schoolPoint, // Return to school
+    ];
 
-  let path: { lat: number; lng: number }[] = [];
+    let path: { lat: number; lng: number }[] = [];
 
-  for (let i = 0; i < route.length - 1; i++) {
-    path.push(
-      ...interpolatePoints(route[i], route[i + 1], 80)
-    );
-  }
-
-  let index = 0;
-
-  const timer = setInterval(async () => {
-    if (index >= path.length) {
-      clearInterval(timer);
-      alert("Simulation Complete!");
-      return;
+    for (let i = 0; i < route.length - 1; i++) {
+      path.push(...interpolatePoints(route[i], route[i + 1], 80));
     }
 
-    const point = path[index];
+    let index = 0;
 
-    setLocation(point);
+    const timer = setInterval(async () => {
+      if (index >= path.length) {
+        clearInterval(timer);
 
-    stops.forEach((stop) => {
-  const distance =
-    Math.sqrt(
-      Math.pow(point.lat - stop.lat, 2) +
-      Math.pow(point.lng - stop.lng, 2)
-    );
+        // Wait a moment so the user can see the bus at school
+        setTimeout(() => {
+          setCompletedStops([]);
+          setLocation({
+            lat: school.latitude,
+            lng: school.longitude,
+          });
 
-  if (distance < 0.0002) {
-    setCompletedStops((prev) =>
-      prev.includes(stop.id) ? prev : [...prev, stop.id]
-    );
-  }
-});
+          alert("Trip Completed! Bus returned to school.");
+        }, 1500);
 
-    try {
-      await fetch("/api/driver/location", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lat: point.lat,
-          lng: point.lng,
-          speed: 35,
-        }),
+        return;
+      }
+
+      const point = path[index];
+
+      setLocation(point);
+
+      stops.forEach((stop) => {
+        const distance = Math.sqrt(
+          Math.pow(point.lat - stop.lat, 2) + Math.pow(point.lng - stop.lng, 2),
+        );
+
+        if (distance < 0.0002) {
+          setCompletedStops((prev) =>
+            prev.includes(stop.id) ? prev : [...prev, stop.id],
+          );
+        }
       });
 
-      socket.emit("bus-location", point);
-    } catch (err) {
-      console.error(err);
-    }
+      try {
+        await fetch("/api/driver/location", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            lat: point.lat,
+            lng: point.lng,
+            speed: 35,
+          }),
+        });
 
-    index++;
-  }, 300);
-};
+        socket.emit("bus-location", point);
+      } catch (err) {
+        console.error(err);
+      }
+
+      index++;
+    }, 300);
+  };
 
   return (
     <main className="dashboard-shell">
@@ -324,7 +338,12 @@ const route = [
                 </span>
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
-                <DriverMap location={location} stops={stops} school={school} completedStops={completedStops}/>
+                <DriverMap
+                  location={location}
+                  stops={stops}
+                  school={school}
+                  completedStops={completedStops}
+                />
               </div>
             </section>
 
@@ -427,28 +446,39 @@ const route = [
               ) : (
                 students.map((student) => (
                   <div
-                    key={student.id}
+                    key={student.student_id}
                     className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>
-                      <p className="font-bold text-slate-950">{student.name}</p>
+                      <p className="font-bold text-slate-950">{student.student_name}</p>
                       <p className="text-sm text-slate-500">
-                        Student ID {student.id}
-                      </p>
+    Stop: {student.stop_name}
+</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
-                      <button
-                        className="btn btn-green"
-                        onClick={() => markStudent(student, "boarded")}
-                      >
-                        Picked Up
-                      </button>
-                      <button
-                        className="btn btn-red"
-                        onClick={() => markStudent(student, "dropped")}
-                      >
-                        Dropped
-                      </button>
+                      {student.status === "waiting" && (
+    <button
+        className="btn btn-green"
+        onClick={() => pickupStudent(student.id)}
+    >
+        Pickup
+    </button>
+)}
+
+{student.status === "boarded" && (
+    <button
+        className="btn btn-red"
+        onClick={() => dropStudent(student.id)}
+    >
+        Drop
+    </button>
+)}
+
+{student.status === "dropped" && (
+    <span className="font-semibold text-green-600">
+        ✔ Completed
+    </span>
+)}
                     </div>
                   </div>
                 ))
