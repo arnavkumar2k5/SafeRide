@@ -74,6 +74,12 @@ type AttendanceItem = {
   updated_at: string | Date;
 };
 
+type TripHistory = {
+  busId: string;
+  busNumber: string;
+  points: [number, number][];
+};
+
 type Analytics = {
   totalTrips?: number;
   boarded?: number;
@@ -138,7 +144,10 @@ const [editStopOrder, setEditStopOrder] = useState("");
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceItem[]>(
     [],
   );
-  const [tripHistory, setTripHistory] = useState<[number, number][]>([]);
+  const [tripHistory, setTripHistory] =
+  useState<TripHistory[]>([]);
+  const [replayPoints, setReplayPoints] =
+  useState<[number, number][]>([]);
   const [selectedTripBus, setSelectedTripBus] = useState<string>("all");
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -174,33 +183,57 @@ const onStopMoved = (
     setEditedLng(lng);
 };
 
-  const fetchTripHistory = async (busId: string) => {
-    try {
-      const res = await fetch(`/api/admin/trip-history/${busId}`);
-      const data = await res.json();
-      const formatted: [number, number][] = data.map((item: TripPoint) => [
-        item.lat,
-        item.lng,
-      ]);
-      setTripHistory(formatted);
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  const fetchTripHistory = async () => {
+  try {
+    const res = await fetch("/api/admin/trip-history");
+    const data = await res.json();
+
+    const grouped = data.reduce((acc: any, item: any) => {
+      const existing = acc.find(
+        (bus: any) => bus.busId === item.bus_id
+      );
+
+      if (existing) {
+        existing.points.push([item.lat, item.lng]);
+      } else {
+        acc.push({
+          busId: item.bus_id,
+          busNumber: item.bus_number,
+          points: [[item.lat, item.lng]],
+        });
+      }
+
+      return acc;
+    }, []);
+
+    setTripHistory(grouped);
+
+  } catch (error) {
+    console.error(error);
+  }
+};
 
   const replayTrip = () => {
-    if (tripHistory.length === 0) return;
+  const selected = tripHistory.find(
+    (bus) => bus.busId === selectedTripBus
+  );
 
-    let index = 0;
-    const interval = setInterval(() => {
-      setReplayPosition(tripHistory[index]);
-      index++;
+  if (!selected) return;
 
-      if (index >= tripHistory.length) {
-        clearInterval(interval);
-      }
-    }, 1000);
-  };
+  setReplayPoints(selected.points);
+
+  let index = 0;
+
+  const interval = setInterval(() => {
+    setReplayPosition(selected.points[index]);
+
+    index++;
+
+    if (index >= selected.points.length) {
+      clearInterval(interval);
+    }
+  }, 1000);
+};
 
   const fetchAttendance = async () => {
     try {
@@ -292,13 +325,9 @@ const onStopMoved = (
 }, []);
 
   useEffect(() => {
-    if (selectedTripBus !== "all") {
-      fetchTripHistory(selectedTripBus);
-    } else {
-      setTripHistory([]);
-      setReplayPosition(null);
-    }
-  }, [selectedTripBus]);
+  fetchTripHistory();
+  setReplayPosition(null);
+}, [selectedTripBus]);
 
   const assignDriver = async () => {
     if (!selectedDriver || !selectedBus) {
@@ -804,7 +833,7 @@ const saveStop = async (id: string) => {
                   buses={liveBuses}
                   routes={routeLines}
                   selectedBus={selectedTripBus}
-                  tripHistory={tripHistory}
+                  tripHistory={replayPoints}
                   replayPosition={replayPosition}
                   school={school}
                 />

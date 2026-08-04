@@ -64,12 +64,13 @@ export async function GET(
     const result = await pool.query(
       `
       SELECT
-        lat,
-        lng,
-        created_at
-      FROM trip_history
-      WHERE bus_id = $1
-      ORDER BY created_at ASC
+  lat,
+  lng,
+  created_at
+FROM trip_history
+WHERE bus_id = $1
+  AND DATE(created_at) = CURRENT_DATE
+ORDER BY created_at ASC
       `,
       [busId]
     );
