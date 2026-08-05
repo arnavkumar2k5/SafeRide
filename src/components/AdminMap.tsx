@@ -63,8 +63,8 @@ type Props = {
   buses: Bus[];
   routes: RouteLine[];
   selectedBus: string;
-  tripHistory?: [number, number][];
-  replayPosition?: [number, number] | null;
+  // tripHistory?: [number, number][];
+  // replayPosition?: [number, number] | null;
   school: {
   latitude: number;
   longitude: number;
@@ -120,15 +120,15 @@ export default function AdminMap({
   buses,
   routes,
   selectedBus,
-  tripHistory,
-  replayPosition,
+  // tripHistory,
+  // replayPosition,
   school,
 }: Props) {
   const busesToShow =
   selectedBus === "all"
     ? buses
     : buses.filter((bus) => bus.bus_id === selectedBus);
-    console.log(JSON.stringify(routes, null, 2));
+    // console.log(JSON.stringify(routes, null, 2));
   return (
     <MapContainer
       center={[28.7041, 77.1025]}
@@ -263,7 +263,7 @@ export default function AdminMap({
     ))
   )}
 
-      {tripHistory && tripHistory.length > 0 && (
+      {/* {tripHistory && tripHistory.length > 0 && (
         <Polyline positions={tripHistory} color="#ef4444" weight={6} />
       )}
 
@@ -271,7 +271,7 @@ export default function AdminMap({
         <Marker position={replayPosition}>
           <Popup>Replay position</Popup>
         </Marker>
-      )}
+      )} */}
     </MapContainer>
   );
 }

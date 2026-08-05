@@ -35,21 +35,23 @@ export async function GET() {
     const result = await pool.query(
   `
   SELECT
-      s.name AS student_name,
+    s.name AS student_name,
 
-      ta.status,
+    ta.status,
 
-      ta.trip_date,
+    TO_CHAR(ta.trip_date, 'YYYY-MM-DD') AS trip_date,
 
-      ta.pickup_time,
+    ta.pickup_time,
 
-      ta.drop_time,
+    ta.drop_time,
 
-      b.id AS bus_id,
+    ta.created_at,
 
-      b.bus_number,
+    b.id AS bus_id,
 
-      u.name AS driver_name
+    b.bus_number,
+
+    u.name AS driver_name
 
   FROM trip_attendance ta
 

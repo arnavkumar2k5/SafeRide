@@ -71,14 +71,18 @@ type AttendanceItem = {
   bus_id: string;
   bus_number: string;
   driver_name: string;
-  updated_at: string | Date;
+
+  trip_date: string;
+  pickup_time: string | null;
+  drop_time: string | null;
+  created_at: string;
 };
 
-type TripHistory = {
-  busId: string;
-  busNumber: string;
-  points: [number, number][];
-};
+// type TripHistory = {
+//   busId: string;
+//   busNumber: string;
+//   points: [number, number][];
+// };
 
 type Analytics = {
   totalTrips?: number;
@@ -90,6 +94,31 @@ type Analytics = {
 type School = {
   latitude: number;
   longitude: number;
+};
+
+type RouteMap = {
+  busId: string;
+  busNumber: string;
+  routeId: string;
+  routeName: string;
+  coordinates: [number, number][];
+
+  stops: {
+    id: string;
+    name: string;
+    stopOrder: number;
+    lat: number;
+    lng: number;
+  }[];
+};
+
+type StopItem = {
+  id: string;
+  name: string;
+  route_name: string;
+  stop_order: number;
+  lat: number;
+  lng: number;
 };
 
 export default function AdminDashboard() {
@@ -109,45 +138,24 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [liveBuses, setLiveBuses] = useState<LiveBus[]>([]);
   const [allStops, setAllStops] = useState<StopItem[]>([]);
+  const today = new Date().toISOString().split("T")[0];
 
-  type RouteMap = {
-    busId: string;
-    busNumber: string;
-    routeId: string;
-    routeName: string;
-    coordinates: [number, number][];
-
-    stops: {
-      id: string;
-      name: string;
-      stopOrder: number;
-      lat: number;
-      lng: number;
-    }[];
-  };
-
-  type StopItem = {
-    id: string;
-    name: string;
-    route_name: string;
-    stop_order: number;
-    lat: number;
-    lng: number;
-  };
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedHistoryBus, setSelectedHistoryBus] = useState("all");
 
   const [editingStop, setEditingStop] = useState<string | null>(null);
 
-const [editStopName, setEditStopName] = useState("");
-const [editStopOrder, setEditStopOrder] = useState("");
+  const [editStopName, setEditStopName] = useState("");
+  const [editStopOrder, setEditStopOrder] = useState("");
 
   const [routeLines, setRouteLines] = useState<RouteMap[]>([]);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceItem[]>(
     [],
   );
-  const [tripHistory, setTripHistory] =
-  useState<TripHistory[]>([]);
-  const [replayPoints, setReplayPoints] =
-  useState<[number, number][]>([]);
+  // const [tripHistory, setTripHistory] =
+  // useState<TripHistory[]>([]);
+  // const [replayPoints, setReplayPoints] =
+  // useState<[number, number][]>([]);
   const [selectedTripBus, setSelectedTripBus] = useState<string>("all");
   const [editingStudent, setEditingStudent] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -164,76 +172,89 @@ const [editStopOrder, setEditStopOrder] = useState("");
   const [stopLng, setStopLng] = useState("");
   const [routes, setRoutes] = useState<{ id: string; name: string }[]>([]);
   const [selectedRoute, setSelectedRoute] = useState("");
-  const [replayPosition, setReplayPosition] = useState<[number, number] | null>(
-    null,
-  );
+  // const [replayPosition, setReplayPosition] = useState<[number, number] | null>(
+  //   null,
+  // );
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [school, setSchool] = useState<School | null>(null);
   const [selectedBusRoute, setSelectedBusRoute] = useState("");
 
   const [editedLat, setEditedLat] = useState<number | null>(null);
-const [editedLng, setEditedLng] = useState<number | null>(null);
+  const [editedLng, setEditedLng] = useState<number | null>(null);
 
-const onStopMoved = (
-    stopId: string,
-    lat: number,
-    lng: number
-) => {
+  const onStopMoved = (stopId: string, lat: number, lng: number) => {
     setEditedLat(lat);
     setEditedLng(lng);
-};
+  };
 
-  const fetchTripHistory = async () => {
-  try {
-    const res = await fetch("/api/admin/trip-history");
-    const data = await res.json();
+  //   const fetchTripHistory = async () => {
+  //   try {
+  //     const res = await fetch("/api/admin/trip-history");
+  //     const data = await res.json();
 
-    const grouped = data.reduce((acc: any, item: any) => {
-      const existing = acc.find(
-        (bus: any) => bus.busId === item.bus_id
-      );
+  //     const grouped = data.reduce((acc: any, item: any) => {
+  //       const existing = acc.find(
+  //         (bus: any) => bus.busId === item.bus_id
+  //       );
 
-      if (existing) {
-        existing.points.push([item.lat, item.lng]);
-      } else {
-        acc.push({
-          busId: item.bus_id,
-          busNumber: item.bus_number,
-          points: [[item.lat, item.lng]],
-        });
-      }
+  //       if (existing) {
+  //         existing.points.push([item.lat, item.lng]);
+  //       } else {
+  //         acc.push({
+  //           busId: item.bus_id,
+  //           busNumber: item.bus_number,
+  //           points: [[item.lat, item.lng]],
+  //         });
+  //       }
 
-      return acc;
-    }, []);
+  //       return acc;
+  //     }, []);
 
-    setTripHistory(grouped);
+  //     setTripHistory(grouped);
 
-  } catch (error) {
-    console.error(error);
-  }
-};
+  //   } catch (error) {
+  //     console.error(error);
+  //   }
+  // };
 
-  const replayTrip = () => {
-  const selected = tripHistory.find(
-    (bus) => bus.busId === selectedTripBus
-  );
+  //   const replayTrip = () => {
+  //   const selected = tripHistory.find(
+  //     (bus) => bus.busId === selectedTripBus
+  //   );
 
-  if (!selected) return;
+  //   if (!selected) return;
 
-  setReplayPoints(selected.points);
+  //   setReplayPoints(selected.points);
 
-  let index = 0;
+  //   let index = 0;
 
-  const interval = setInterval(() => {
-    setReplayPosition(selected.points[index]);
+  //   const interval = setInterval(() => {
+  //     setReplayPosition(selected.points[index]);
 
-    index++;
+  //     index++;
 
-    if (index >= selected.points.length) {
-      clearInterval(interval);
-    }
-  }, 1000);
-};
+  //     if (index >= selected.points.length) {
+  //       clearInterval(interval);
+  //     }
+  //   }, 1000);
+  // };
+
+  const filteredAttendance = attendanceHistory.filter((item) => {
+    const itemDate = (item.trip_date || item.created_at.split("T")[0]).split(
+      "T",
+    )[0];
+
+    console.log(item.trip_date, itemDate);
+
+    const dateMatch = itemDate === selectedDate;
+
+    const busMatch =
+      selectedHistoryBus === "all" ||
+      item.bus_id === selectedHistoryBus ||
+      item.bus_number === selectedHistoryBus;
+
+    return dateMatch && busMatch;
+  });
 
   const fetchAttendance = async () => {
     try {
@@ -308,26 +329,26 @@ const onStopMoved = (
   }, []);
 
   useEffect(() => {
-  socket.on("attendance-update", () => {
-    console.log("Attendance updated");
-    fetchAttendance();
-    fetchData();
-  });
+    socket.on("attendance-update", () => {
+      console.log("Attendance updated");
+      fetchAttendance();
+      fetchData();
+    });
 
-  socket.on("bus-location-update", () => {
-    fetchData();
-  });
+    socket.on("bus-location-update", () => {
+      fetchData();
+    });
 
-  return () => {
-    socket.off("attendance-update");
-    socket.off("bus-location-update");
-  };
-}, []);
+    return () => {
+      socket.off("attendance-update");
+      socket.off("bus-location-update");
+    };
+  }, []);
 
-  useEffect(() => {
-  fetchTripHistory();
-  setReplayPosition(null);
-}, [selectedTripBus]);
+  //   useEffect(() => {
+  //   fetchTripHistory();
+  //   setReplayPosition(null);
+  // }, [selectedTripBus]);
 
   const assignDriver = async () => {
     if (!selectedDriver || !selectedBus) {
@@ -520,11 +541,19 @@ const onStopMoved = (
   };
 
   const filteredStops = selectedRoute
-  ? allStops.filter(
-      (stop) =>
-        routes.find((r) => r.id === selectedRoute)?.name === stop.route_name
-    )
-  : allStops;
+    ? allStops.filter(
+        (stop) =>
+          routes.find((r) => r.id === selectedRoute)?.name === stop.route_name,
+      )
+    : allStops;
+
+  console.log("selectedDate:", selectedDate);
+
+attendanceHistory.forEach((item) => {
+  console.log(item.student_name, item.trip_date);
+});
+
+console.log("Filtered rows:", filteredAttendance.length);
 
   const addDriver = async () => {
     try {
@@ -626,63 +655,63 @@ const onStopMoved = (
   };
 
   const deleteStop = async (id: string) => {
-  const confirmDelete = window.confirm(
-    "Are you sure you want to delete this stop?"
-  );
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this stop?",
+    );
 
-  if (!confirmDelete) return;
+    if (!confirmDelete) return;
 
-  try {
-    const res = await fetch(`/api/admin/delete-stop/${id}`, {
-      method: "DELETE",
-    });
+    try {
+      const res = await fetch(`/api/admin/delete-stop/${id}`, {
+        method: "DELETE",
+      });
 
-    const json = await res.json();
+      const json = await res.json();
 
-    if (!res.ok) {
-      alert(json.error);
-      return;
+      if (!res.ok) {
+        alert(json.error);
+        return;
+      }
+
+      await fetchData();
+
+      alert(json.message);
+    } catch (error) {
+      console.error(error);
     }
+  };
 
-    await fetchData();
+  const saveStop = async (id: string) => {
+    try {
+      const res = await fetch(`/api/admin/edit-stop/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: editStopName,
+          stopOrder: Number(editStopOrder),
+          lat: editedLat,
+          lng: editedLng,
+        }),
+      });
 
-    alert(json.message);
-  } catch (error) {
-    console.error(error);
-  }
-};
+      const json = await res.json();
 
-const saveStop = async (id: string) => {
-  try {
-    const res = await fetch(`/api/admin/edit-stop/${id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-    name: editStopName,
-    stopOrder: Number(editStopOrder),
-    lat: editedLat,
-    lng: editedLng,
-}),
-    });
+      if (!res.ok) {
+        alert(json.error);
+        return;
+      }
 
-    const json = await res.json();
+      await fetchData();
 
-    if (!res.ok) {
-      alert(json.error);
-      return;
+      setEditingStop(null);
+
+      alert(json.message);
+    } catch (error) {
+      console.error(error);
     }
-
-    await fetchData();
-
-    setEditingStop(null);
-
-    alert(json.message);
-  } catch (error) {
-    console.error(error);
-  }
-};
+  };
 
   if (loading) {
     return (
@@ -758,8 +787,7 @@ const saveStop = async (id: string) => {
                 Transport Operations
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Live fleet visibility, attendance, route replay, and resource
-                management.
+                Live fleet visibility, attendance and resource management.
               </p>
             </div>
             <span className="status-pill bg-green-50 text-green-700">
@@ -803,11 +831,10 @@ const saveStop = async (id: string) => {
               <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">
-                    Live tracking and replay
+                    Live tracking
                   </h2>
                   <p className="text-sm text-slate-500">
-                    Active bus markers with trip history overlay and replay
-                    position.
+                    Active bus markers with trip history overlay.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -823,9 +850,9 @@ const saveStop = async (id: string) => {
                       </option>
                     ))}
                   </select>
-                  <button className="btn btn-yellow" onClick={replayTrip}>
+                  {/* <button className="btn btn-yellow" onClick={replayTrip}>
                     Replay Trip
-                  </button>
+                  </button> */}
                 </div>
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
@@ -833,8 +860,8 @@ const saveStop = async (id: string) => {
                   buses={liveBuses}
                   routes={routeLines}
                   selectedBus={selectedTripBus}
-                  tripHistory={replayPoints}
-                  replayPosition={replayPosition}
+                  // tripHistory={replayPoints}
+                  // replayPosition={replayPosition}
                   school={school}
                 />
               </div>
@@ -845,7 +872,20 @@ const saveStop = async (id: string) => {
                 Activity feed
               </h2>
               <div className="mt-4 space-y-3">
-                {attendanceHistory.slice(0, 7).map((item, index) => (
+                {filteredAttendance
+  .sort(
+    (a, b) =>
+      new Date(
+        b.drop_time ??
+        b.pickup_time ??
+        b.created_at
+      ).getTime() -
+      new Date(
+        a.drop_time ??
+        a.pickup_time ??
+        a.created_at
+      ).getTime()
+  ).slice(0, 7).map((item, index) => (
                   <div
                     key={index}
                     className="flex gap-3 border-b border-slate-100 pb-3 last:border-0"
@@ -862,7 +902,9 @@ const saveStop = async (id: string) => {
                         bus {item.bus_id}
                       </p>
                       <p className="text-xs text-slate-400">
-                        {new Date(item.updated_at).toLocaleString()}
+                        {new Date(
+                          item.drop_time ?? item.pickup_time ?? item.created_at,
+                        ).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -1006,20 +1048,20 @@ const saveStop = async (id: string) => {
 
                 <div className="mt-3">
                   <StopPickerMap
-  lat={stopLat}
-  lng={stopLng}
-  school={school}
-  selectedRoute={selectedRoute}
-  routes={routeLines}
-  editingStopId={editingStop}
-  editedLat={editedLat}
-    editedLng={editedLng}
-  onStopMoved={onStopMoved}
-  onLocationSelect={(lat, lng) => {
-    setStopLat(lat.toFixed(6));
-    setStopLng(lng.toFixed(6));
-  }}
-/>
+                    lat={stopLat}
+                    lng={stopLng}
+                    school={school}
+                    selectedRoute={selectedRoute}
+                    routes={routeLines}
+                    editingStopId={editingStop}
+                    editedLat={editedLat}
+                    editedLng={editedLng}
+                    onStopMoved={onStopMoved}
+                    onLocationSelect={(lat, lng) => {
+                      setStopLat(lat.toFixed(6));
+                      setStopLng(lng.toFixed(6));
+                    }}
+                  />
                 </div>
                 <button className="btn btn-green w-full" onClick={addStop}>
                   Add Stop
@@ -1028,113 +1070,104 @@ const saveStop = async (id: string) => {
             </div>
 
             <div className="dashboard-card p-5 mt-4">
-  <h2 className="text-lg font-bold">
-    Manage Stops
-  </h2>
+              <h2 className="text-lg font-bold">Manage Stops</h2>
 
-  <table className="ops-table mt-4">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Route</th>
-        <th>Order</th>
-        <th>Latitude</th>
-        <th>Longitude</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
+              <table className="ops-table mt-4">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Route</th>
+                    <th>Order</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
 
-    <tbody>
+                <tbody>
+                  {filteredStops.map((stop) => (
+                    <React.Fragment key={stop.id}>
+                      <tr key={stop.id}>
+                        <td>{stop.name}</td>
 
-      {filteredStops.map((stop) => (
-  <React.Fragment key={stop.id}>
-        <tr key={stop.id}>
+                        <td>{stop.route_name}</td>
 
-          <td>{stop.name}</td>
+                        <td>{stop.stop_order}</td>
 
-          <td>{stop.route_name}</td>
+                        <td>{stop.lat.toFixed(5)}</td>
 
-          <td>{stop.stop_order}</td>
+                        <td>{stop.lng.toFixed(5)}</td>
 
-          <td>{stop.lat.toFixed(5)}</td>
+                        <td>
+                          <div className="flex gap-2">
+                            <button
+                              className="btn btn-soft min-h-9 px-3 py-1"
+                              onClick={() => {
+                                setEditingStop(stop.id);
+                                setEditStopName(stop.name);
+                                setEditStopOrder(String(stop.stop_order));
 
-          <td>{stop.lng.toFixed(5)}</td>
+                                // NEW
+                                setEditedLat(stop.lat);
+                                setEditedLng(stop.lng);
+                              }}
+                            >
+                              Edit
+                            </button>
 
-          <td>
-  <div className="flex gap-2">
-    <button
-  className="btn btn-soft min-h-9 px-3 py-1"
-  onClick={() => {
-  setEditingStop(stop.id);
-  setEditStopName(stop.name);
-  setEditStopOrder(String(stop.stop_order));
+                            <button
+                              className="btn btn-red min-h-9 px-3 py-1"
+                              onClick={() => deleteStop(stop.id)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
 
-  // NEW
-  setEditedLat(stop.lat);
-  setEditedLng(stop.lng);
-}}
->
-  Edit
-</button>
+                      {editingStop === stop.id && (
+                        <tr>
+                          <td colSpan={6} className="bg-slate-50">
+                            <div className="grid gap-3 md:grid-cols-[1fr_120px_auto_auto]">
+                              <input
+                                className="field"
+                                value={editStopName}
+                                onChange={(e) =>
+                                  setEditStopName(e.target.value)
+                                }
+                              />
 
-    <button
-      className="btn btn-red min-h-9 px-3 py-1"
-      onClick={() => deleteStop(stop.id)}
-    >
-      Delete
-    </button>
-  </div>
-</td>
+                              <input
+                                className="field"
+                                type="number"
+                                value={editStopOrder}
+                                onChange={(e) =>
+                                  setEditStopOrder(e.target.value)
+                                }
+                              />
 
-        </tr>
-    
+                              <button
+                                className="btn btn-green"
+                                onClick={() => saveStop(stop.id)}
+                              >
+                                Save
+                              </button>
 
-    {editingStop === stop.id && (
-      <tr>
-        <td colSpan={6} className="bg-slate-50">
-
-          <div className="grid gap-3 md:grid-cols-[1fr_120px_auto_auto]">
-
-            <input
-              className="field"
-              value={editStopName}
-              onChange={(e) => setEditStopName(e.target.value)}
-            />
-
-            <input
-              className="field"
-              type="number"
-              value={editStopOrder}
-              onChange={(e) => setEditStopOrder(e.target.value)}
-            />
-
-            <button
-              className="btn btn-green"
-              onClick={() => saveStop(stop.id)}
-            >
-              Save
-            </button>
-
-            <button
-              className="btn btn-soft"
-              onClick={() => setEditingStop(null)}
-            >
-              Cancel
-            </button>
-
-          </div>
-
-        </td>
-      </tr>
-    )}
-
-  </React.Fragment>
-))}
-
-    </tbody>
-
-  </table>
-</div>
+                              <button
+                                className="btn btn-soft"
+                                onClick={() => setEditingStop(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section id="students" className="dashboard-card p-5">
@@ -1410,6 +1443,30 @@ const saveStop = async (id: string) => {
               Attendance history
             </h2>
             <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
+              <div className="mb-4 flex flex-wrap gap-3">
+                <input
+  type="date"
+  value={selectedDate}
+  onChange={(e) => {
+    console.log("Selected:", e.target.value);
+    setSelectedDate(e.target.value);
+  }}
+/>
+
+                <select
+                  value={selectedHistoryBus}
+                  onChange={(e) => setSelectedHistoryBus(e.target.value)}
+                  className="field"
+                >
+                  <option value="all">All Buses</option>
+
+                  {buses.map((bus) => (
+                    <option key={bus.id} value={bus.id}>
+                      {bus.bus_number}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <table className="ops-table">
                 <thead>
                   <tr>
@@ -1421,7 +1478,7 @@ const saveStop = async (id: string) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {attendanceHistory.map((item, index) => (
+                  {filteredAttendance.map((item, index) => (
                     <tr key={index}>
                       <td className="font-semibold">{item.student_name}</td>
                       <td>
@@ -1433,9 +1490,20 @@ const saveStop = async (id: string) => {
                       </td>
                       <td>{item.bus_number}</td>
                       <td>{item.driver_name}</td>
-                      <td>{new Date(item.updated_at).toLocaleString()}</td>
+                      <td>
+                        {new Date(
+                          item.drop_time ?? item.pickup_time ?? item.created_at,
+                        ).toLocaleString()}
+                      </td>
                     </tr>
                   ))}
+                  {filteredAttendance.length === 0 && (
+  <tr>
+    <td colSpan={5} className="py-6 text-center text-slate-500">
+      No attendance found for this date.
+    </td>
+  </tr>
+)}
                 </tbody>
               </table>
             </div>
