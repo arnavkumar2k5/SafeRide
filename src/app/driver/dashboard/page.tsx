@@ -7,16 +7,30 @@ import { BrandLogo } from "@/components/BrandLogo";
 
 
 type Student = {
-  id: string;
-  student_id: string;
-  student_name: string;
-  stop_name: string;
 
-  status: "waiting" | "boarded" | "dropped";
+id: string;
 
-  pickup_time: string | null;
-  drop_time: string | null;
-};
+student_id: string;
+
+student_name: string;
+
+stop_id: string;
+
+stop_order: number;
+
+stop_name: string;
+
+status:
+  | "waiting"
+  | "boarded"
+  | "arrived_school"
+  | "dropped"
+  | "absent";
+
+pickup_time: string | null;
+
+drop_time: string | null;
+}
 
 type School = {
   latitude: number;
@@ -28,6 +42,13 @@ type Stop = {
   name: string;
   lat: number;
   lng: number;
+};
+
+type TripStatus = "idle" | "pickup" | "at_school" | "drop" | "completed";
+
+type TodayResponse = {
+  students: Student[];
+  trip_status: TripStatus;
 };
 
 const DriverMap = dynamic(() => import("@/components/DriverMap"), {
@@ -43,12 +64,18 @@ export default function DriverDashboard() {
   const [school, setSchool] = useState<School | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [completedStops, setCompletedStops] = useState<string[]>([]);
+  const [tripStatus, setTripStatus] = useState<TripStatus | null>(null);
 
   const fetchStudents = async () => {
     try {
       const res = await fetch("/api/driver/today");
-      const data = await res.json();
-      setStudents(data);
+      const data: TodayResponse = await res.json();
+      setStudents(data.students);
+      setTripStatus(data.trip_status);
+      const progressRes = await fetch("/api/driver/stop-progress");
+const progressData = await progressRes.json();
+
+setCompletedStops(progressData.completedStops);
     } catch (error) {
       console.error(error);
     }
@@ -163,6 +190,36 @@ export default function DriverDashboard() {
   fetchStudents();
 };
 
+const markAbsent = async (attendanceId: string) => {
+  await fetch("/api/driver/absent", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      attendanceId,
+    }),
+  });
+
+  fetchStudents();
+};
+
+const markArrivedAtSchool = async () => {
+  await fetch("/api/driver/arrived-school", {
+    method: "POST",
+  });
+
+  fetchStudents();
+};
+
+const dropAllStudents = async () => {
+  await fetch("/api/driver/drop-all", {
+    method: "POST",
+  });
+
+  fetchStudents();
+};
+
 const dropStudent = async (attendanceId: string) => {
   await fetch("/api/driver/drop", {
     method: "POST",
@@ -177,9 +234,43 @@ const dropStudent = async (attendanceId: string) => {
   fetchStudents();
 };
 
+const currentStop = stops.find(
+  (stop) => !completedStops.includes(stop.id)
+);
+
+const studentsAtCurrentStop = currentStop
+  ? students.filter(
+      (student) => student.stop_id === currentStop.id
+    )
+  : [];
+
+const allStudentsHandled =
+  studentsAtCurrentStop.every(
+    (student) =>
+      student.status === "boarded" ||
+      student.status === "absent"
+);
+
+const updateTripStatus = async (
+  status: Exclude<TripStatus, "idle">
+) => {
+  await fetch("/api/driver/trip-status", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      status,
+    }),
+  });
+
+  setTripStatus(status);
+};
+
   const startSimulation = async () => {
     if (!school || stops.length === 0) return;
-    setCompletedStops([]);
+    // Don't clear completed stops.
+// They are restored from the database.
 
     const schoolPoint = {
       lat: school.latitude,
@@ -225,17 +316,31 @@ const dropStudent = async (attendanceId: string) => {
 
       setLocation(point);
 
-      stops.forEach((stop) => {
+      for (const stop of stops) {
         const distance = Math.sqrt(
           Math.pow(point.lat - stop.lat, 2) + Math.pow(point.lng - stop.lng, 2),
         );
 
-        if (distance < 0.0002) {
-          setCompletedStops((prev) =>
-            prev.includes(stop.id) ? prev : [...prev, stop.id],
-          );
-        }
-      });
+        if (
+    distance < 0.0002 &&
+    allStudentsHandled
+) {
+    if (!completedStops.includes(stop.id)) {
+
+    await fetch("/api/driver/stop-progress", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            stopId: stop.id,
+        }),
+    });
+
+    setCompletedStops((prev) => [...prev, stop.id]);
+
+}}
+      }
 
       try {
         await fetch("/api/driver/location", {
@@ -311,6 +416,50 @@ const dropStudent = async (attendanceId: string) => {
             <button className="btn btn-green" onClick={startSimulation}>
               Start Simulation
             </button>
+            {tripStatus === "idle" && (
+  <button
+    className="btn btn-green"
+    onClick={() => updateTripStatus("pickup")}
+  >
+    Start Pickup
+  </button>
+)}
+
+{tripStatus === "pickup" && (
+  <button
+    className="btn btn-yellow"
+    onClick={() => updateTripStatus("at_school")}
+  >
+    Reached School
+  </button>
+)}
+
+{tripStatus === "at_school" && (
+  <>
+    <button
+      className="btn btn-green"
+      onClick={markArrivedAtSchool}
+    >
+      Mark Arrived at School
+    </button>
+
+    <button
+      className="btn btn-blue"
+      onClick={() => updateTripStatus("drop")}
+    >
+      Start Drop Trip
+    </button>
+  </>
+)}
+
+{tripStatus === "drop" && (
+  <button
+    className="btn btn-red"
+    onClick={() => updateTripStatus("completed")}
+  >
+    Finish Trip
+  </button>
+)}
           </header>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -352,6 +501,9 @@ const dropStudent = async (attendanceId: string) => {
                 <h2 className="text-lg font-bold text-slate-950">
                   Driver status
                 </h2>
+                <span>Trip Status
+
+{tripStatus}</span>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="dashboard-card-muted p-3">
                     <p className="text-xs font-bold uppercase text-slate-400">
@@ -426,57 +578,100 @@ const dropStudent = async (attendanceId: string) => {
           <section id="students" className="dashboard-card p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
+                <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+    Current Stop
+  </p>
+
+  <h3 className="mt-1 text-xl font-bold text-slate-900">
+    📍 {currentStop?.name ?? "Trip Completed"}
+  </h3>
+
+  <p className="mt-2 text-sm text-slate-600">
+    {studentsAtCurrentStop.length} student(s)
+  </p>
+</div>
+{!allStudentsHandled &&
+currentStop && (
+<div className="rounded-lg bg-yellow-50 border border-yellow-300 p-3 mb-4">
+
+⚠ Please mark every student as
+Pickup or Absent before leaving this stop.
+
+</div>
+)}
                 <h2 className="text-lg font-bold text-slate-950">
-                  Student manifest
+                  Current Stop Students
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Mark pickup and drop-off events in real time.
+                  Mark students as Picked or Absent for the current stop.
                 </p>
               </div>
               <span className="status-pill bg-amber-50 text-amber-700">
-                {students.length} assigned
+                {studentsAtCurrentStop.length} students
               </span>
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {students.length === 0 ? (
+              {studentsAtCurrentStop.length === 0 ? (
                 <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
-                  No students are assigned to this route.
+                  No students are waiting at this stop.
                 </p>
               ) : (
-                students.map((student) => (
+                studentsAtCurrentStop.map((student) => (
                   <div
                     key={student.student_id}
                     className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>
                       <p className="font-bold text-slate-950">{student.student_name}</p>
-                      <p className="text-sm text-slate-500">
-    Stop: {student.stop_name}
-</p>
+                      
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
                       {student.status === "waiting" && (
+  <>
     <button
-        className="btn btn-green"
-        onClick={() => pickupStudent(student.id)}
+      className="btn btn-green"
+      onClick={() => pickupStudent(student.id)}
     >
-        Pickup
+      Pickup
     </button>
+
+    <button
+      className="btn btn-gray"
+      onClick={() => markAbsent(student.id)}
+    >
+      Absent
+    </button>
+  </>
 )}
 
-{student.status === "boarded" && (
-    <button
-        className="btn btn-red"
-        onClick={() => dropStudent(student.id)}
-    >
-        Drop
-    </button>
+{tripStatus === "drop" &&
+ student.status === "arrived_school" && (
+  <button
+    className="btn btn-red"
+    onClick={() => dropStudent(student.id)}
+  >
+    Drop
+  </button>
 )}
 
 {student.status === "dropped" && (
     <span className="font-semibold text-green-600">
         ✔ Completed
+    </span>
+)}
+
+{student.status === "arrived_school" &&
+ tripStatus !== "drop" && (
+  <span className="font-semibold text-blue-600">
+    🏫 At School
+  </span>
+)}
+
+{student.status === "absent" && (
+    <span className="font-semibold text-red-600">
+        ❌ Absent
     </span>
 )}
                     </div>

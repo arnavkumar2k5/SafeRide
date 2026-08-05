@@ -19,7 +19,7 @@ export async function GET() {
     // Find driver's bus
     const busResult = await pool.query(
       `
-      SELECT id, school_id
+      SELECT id, school_id, trip_status
       FROM buses
       WHERE driver_id=$1
       `,
@@ -79,19 +79,23 @@ export async function GET() {
       `
       SELECT
 
-      ta.id,
+ta.id,
 
-      ta.student_id,
+ta.student_id,
 
-      s.name AS student_name,
+s.name AS student_name,
 
-      st.name AS stop_name,
+st.id AS stop_id,
 
-      ta.status,
+st.stop_order,
 
-      ta.pickup_time,
+st.name AS stop_name,
 
-      ta.drop_time
+ta.status,
+
+ta.pickup_time,
+
+ta.drop_time
 
       FROM trip_attendance ta
 
@@ -112,7 +116,10 @@ export async function GET() {
       [bus.id]
     );
 
-    return NextResponse.json(today.rows);
+    return NextResponse.json({
+      students: today.rows,
+      trip_status: bus.trip_status || "idle",
+    });
   } catch (err) {
     console.error(err);
 
