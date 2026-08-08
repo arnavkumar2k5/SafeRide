@@ -45,6 +45,15 @@ export async function POST(req: Request){
   [busId, lat, lng, speed || 0]
 );
 
+        const io = (global as any).io;
+        if (io) {
+          io.emit("bus-location-update", {
+            busId,
+            lat,
+            lng,
+          });
+        }
+
 const studentsResult =
   await pool.query(
     `

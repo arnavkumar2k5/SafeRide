@@ -29,10 +29,18 @@ const schoolIcon = new L.Icon({
   iconSize: [40, 40],
 });
 
+const studentStopIcon = new L.Icon({
+  iconUrl: "/icons/stop-pending.svg",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
+
 type Props = {
   lat: number;
   lng: number;
   busId?: string;
+  busNumber?: string;
   driverName?: string;
   stopLat?: number;
   stopLng?: number;
@@ -64,7 +72,7 @@ function FitAllMarkers({
       bounds.push([stopLat, stopLng]);
     }
 
-    if (school) {
+        if (school && typeof school.latitude === "number" && typeof school.longitude === "number") {
       bounds.push([school.latitude, school.longitude]);
     }
 
@@ -78,6 +86,7 @@ export default function Map({
   lat,
   lng,
   busId,
+  busNumber,
   driverName,
   stopLat,
   stopLng,
@@ -146,7 +155,7 @@ export default function Map({
       />
       <Polyline positions={routePositions} color="#2563eb" weight={5} />
 
-      {school && (
+            {school && typeof school.latitude === "number" && typeof school.longitude === "number" && (
         <Marker icon={schoolIcon} position={[school.latitude, school.longitude]}>
           <Popup>School campus</Popup>
         </Marker>
@@ -154,14 +163,14 @@ export default function Map({
 
       <Marker ref={markerRef} position={[lat, lng]}>
         <Popup>
-          Bus ID: {busId}
+          Bus Number: {busNumber || "Not assigned"}
           <br />
           Driver: {driverName}
         </Popup>
       </Marker>
 
       {stopLat !== undefined && stopLng !== undefined && (
-        <Marker position={[stopLat, stopLng]}>
+        <Marker position={[stopLat, stopLng]} icon={studentStopIcon}>
           <Popup>Student stop</Popup>
         </Marker>
       )}

@@ -124,11 +124,6 @@ export default function DriverDashboard() {
                 speed: position.coords.speed || 0,
               }),
             });
-
-            socket.emit("bus-location", {
-              lat,
-              lng,
-            });
           } catch (error) {
             console.error(error);
           }
@@ -384,8 +379,6 @@ export default function DriverDashboard() {
               speed: 35,
             }),
           });
-
-          socket.emit("bus-location", point);
         } catch (error) {
           console.error("Simulation location error:", error);
         }

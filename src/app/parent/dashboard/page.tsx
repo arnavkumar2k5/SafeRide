@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { socket } from "@/lib/socket";
 
@@ -10,8 +10,15 @@ const Map = dynamic(() => import("@/components/Map"), {
 });
 
 type ParentData = {
+  student_id: string;
   student_name: string;
   bus_id: string;
+  bus_number?: string;
+  bus_trip_status?: string;
+  student_status?: string;
+  student_pickup_time?: string | null;
+  student_drop_time?: string | null;
+  student_absent_time?: string | null;
   stop_name: string;
   driver_name?: string;
   stop_lat?: number;
@@ -28,12 +35,10 @@ type School = {
   longitude: number;
 };
 
-type HistoryItem = {
-  status: string;
-  updated_at: string | Date;
-};
+
 
 type BusLocationUpdate = {
+  busId: string;
   lat: number;
   lng: number;
 };
@@ -43,9 +48,16 @@ type BusNearStopEvent = {
 };
 
 type StudentStatusEvent = {
+  attendanceId: string;
   studentId?: string;
-  studentName: string;
   status: string;
+  attendance?: {
+    id: string;
+    student_id: string;
+    status: string;
+    pickup_time?: string | null;
+    drop_time?: string | null;
+  };
 };
 
 export default function ParentDashboard() {
@@ -62,8 +74,107 @@ export default function ParentDashboard() {
     name: string;
     status: string;
   } | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [school, setSchool] = useState<School | null>(null);
+
+  const dataRef = useRef<ParentData | null>(null);
+  const schoolRef = useRef<School | null>(null);
+
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    schoolRef.current = school;
+  }, [school]);
+
+  const getStudentStatusText = (status?: string) => {
+    switch (status) {
+      case "waiting":
+        return "Waiting for pickup";
+      case "boarded":
+        return "Picked Up";
+      case "absent":
+        return "Absent";
+      case "arrived_school":
+        return "At School";
+      case "dropped":
+        return "Dropped Home";
+      default:
+        return "Waiting for pickup";
+    }
+  };
+
+  const getFormattedDateTime = (isoString?: string | null) => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }) + ' at ' + date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const getTimelineItems = () => {
+    if (!data || !data.student_status) return [];
+
+    const items = [];
+
+    // 1. waiting: shows no events (empty array)
+
+    // 3. absent
+    if (data.student_status === "absent") {
+      items.push({
+        status: "absent",
+        label: "Absent",
+        time: getFormattedDateTime(data.student_absent_time) || "Today",
+        color: "bg-red-500",
+      });
+    }
+
+    // 2. boarded
+    if (
+      data.student_status === "boarded" ||
+      data.student_status === "arrived_school" ||
+      data.student_status === "dropped"
+    ) {
+      if (data.student_pickup_time) {
+        items.push({
+          status: "boarded",
+          label: "Picked Up",
+          time: getFormattedDateTime(data.student_pickup_time),
+          color: "bg-green-500",
+        });
+      }
+    }
+
+    // 5. arrived_school
+    if (data.student_status === "arrived_school") {
+      items.push({
+        status: "arrived_school",
+        label: "At School",
+        time: "Today",
+        color: "bg-blue-500",
+      });
+    }
+
+    // 4. dropped
+    if (data.student_status === "dropped") {
+      if (data.student_drop_time) {
+        items.push({
+          status: "dropped",
+          label: "Dropped Home",
+          time: getFormattedDateTime(data.student_drop_time),
+          color: "bg-green-500",
+        });
+      }
+    }
+
+    return items.reverse(); // Show most recent events first
+  };
 
   const showNotification = (title: string, body: string) => {
     if (
@@ -127,8 +238,13 @@ export default function ParentDashboard() {
               );
 
               const schoolRes = await fetch("/api/admin/school");
-              const schoolJson = await schoolRes.json();
-              setSchool(schoolJson);
+
+if (schoolRes.ok) {
+  const schoolJson = await schoolRes.json();
+  setSchool(schoolJson);
+} else {
+  setSchool(null);
+}
 
               const routeData = await res.json();
               const summary = routeData.routes[0].summary;
@@ -157,9 +273,6 @@ export default function ParentDashboard() {
           setError("No bus ID found");
         }
 
-        const historyRes = await fetch("/api/parent/history");
-        const historyData = await historyRes.json();
-        setHistory(historyData.history);
         setLoading(false);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "An error occurred");
@@ -170,49 +283,54 @@ export default function ParentDashboard() {
     fetchData();
 
     socket.on("bus-location-update", async (liveData: BusLocationUpdate) => {
-      setLocation({ lat: liveData.lat, lng: liveData.lng });
+      const currentData = dataRef.current;
+      const currentSchool = schoolRef.current;
 
-      if (school && data?.stop_lat !== undefined && data?.stop_lng !== undefined) {
-        try {
-          const res = await fetch(
-            "https://api.openrouteservice.org/v2/directions/driving-car",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
+      if (currentData && liveData.busId === currentData.bus_id) {
+        setLocation({ lat: liveData.lat, lng: liveData.lng });
+
+        if (currentSchool && currentData.stop_lat !== undefined && currentData.stop_lng !== undefined) {
+          try {
+            const res = await fetch(
+              "https://api.openrouteservice.org/v2/directions/driving-car",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
+                },
+                body: JSON.stringify({
+                  coordinates: [
+                    [liveData.lng, liveData.lat],
+                    [currentData.stop_lng, currentData.stop_lat],
+                  ],
+                }),
               },
-              body: JSON.stringify({
-                coordinates: [
-                  [school!.longitude, school!.latitude],
-                  [data.stop_lng, data.stop_lat],
-                ],
-              }),
-            },
-          );
+            );
 
-          const routeData = await res.json();
-          const summary = routeData.routes[0].summary;
+            const routeData = await res.json();
+            const summary = routeData.routes[0].summary;
 
-          setEta({
-            distance: (summary.distance / 1000).toFixed(2),
-            duration: (summary.duration / 60).toFixed(0),
-          });
+            setEta({
+              distance: (summary.distance / 1000).toFixed(2),
+              duration: (summary.duration / 60).toFixed(0),
+            });
 
-          const distance = summary.distance;
+            const distance = summary.distance;
 
-          if (distance <= 50) {
-            setBusArrived(true);
-            setBusNear(false);
-          } else if (distance <= 500) {
-            setBusNear(true);
-            setBusArrived(false);
-          } else {
-            setBusArrived(false);
-            setBusNear(false);
+            if (distance <= 50) {
+              setBusArrived(true);
+              setBusNear(false);
+            } else if (distance <= 500) {
+              setBusNear(true);
+              setBusArrived(false);
+            } else {
+              setBusArrived(false);
+              setBusNear(false);
+            }
+          } catch (error) {
+            console.error("ETA error:", error);
           }
-        } catch (error) {
-          console.error("ETA error:", error);
         }
       }
     });
@@ -222,24 +340,32 @@ export default function ParentDashboard() {
     });
 
     socket.on("attendance-update", (liveData: StudentStatusEvent) => {
-  showNotification(
-    "Student Update",
-    `${liveData.studentName} ${liveData.status}`
-  );
+      const currentData = dataRef.current;
+      const targetStudentId = liveData.studentId || liveData.attendance?.student_id;
 
-  setStudentNotification({
-    name: liveData.studentName,
-    status: liveData.status,
-  });
+      if (currentData && targetStudentId === currentData.student_id) {
+        showNotification(
+          "Student Update",
+          `${currentData.student_name} is now: ${getStudentStatusText(liveData.status)}`
+        );
 
-  setHistory((prev) => [
-    {
-      status: liveData.status,
-      updated_at: new Date(),
-    },
-    ...prev,
-  ]);
-});
+        setStudentNotification({
+          name: currentData.student_name,
+          status: getStudentStatusText(liveData.status),
+        });
+
+        setData((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            student_status: liveData.status,
+            student_pickup_time: liveData.status === "boarded" ? new Date().toISOString() : prev.student_pickup_time,
+            student_drop_time: liveData.status === "dropped" ? new Date().toISOString() : prev.student_drop_time,
+            student_absent_time: liveData.status === "absent" ? new Date().toISOString() : prev.student_absent_time,
+          };
+        });
+      }
+    });
 
     return () => {
       socket.off("bus-location-update");
@@ -300,14 +426,32 @@ export default function ParentDashboard() {
                 {data.student_name}&apos;s Live Ride
               </h1>
               <p className="mt-1 text-sm text-slate-500">
-                Bus {data.bus_id} to {data.stop_name}
+                Bus Number: {data.bus_number || "Not assigned"} to {data.stop_name}
               </p>
             </div>
           </div>
-          <span className="status-pill bg-blue-50 text-blue-700">
-            <span className="h-2 w-2 rounded-full bg-blue-500" />
-            {routeStatus}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="status-pill bg-blue-50 text-blue-700">
+              <span className="h-2 w-2 rounded-full bg-blue-500" />
+              Bus: {routeStatus}
+            </span>
+            <span className={`status-pill ${
+              data.student_status === "boarded" || data.student_status === "arrived_school" || data.student_status === "dropped"
+                ? "bg-green-50 text-green-700"
+                : data.student_status === "absent"
+                  ? "bg-red-50 text-red-700"
+                  : "bg-amber-50 text-amber-700"
+            }`}>
+              <span className={`h-2 w-2 rounded-full ${
+                data.student_status === "boarded" || data.student_status === "arrived_school" || data.student_status === "dropped"
+                  ? "bg-green-500"
+                  : data.student_status === "absent"
+                    ? "bg-red-500"
+                    : "bg-amber-500"
+              }`} />
+              Student: {getStudentStatusText(data.student_status)}
+            </span>
+          </div>
         </header>
 
         <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -337,6 +481,7 @@ export default function ParentDashboard() {
                 lat={location?.lat}
                 lng={location?.lng}
                 busId={data?.bus_id}
+                busNumber={data?.bus_number}
                 driverName={data?.driver_name}
                 stopLat={data?.stop_lat}
                 stopLng={data?.stop_lng}
@@ -354,8 +499,18 @@ export default function ParentDashboard() {
                   <dd className="font-semibold text-slate-950">{data.student_name}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500">Bus</dt>
-                  <dd className="font-semibold text-slate-950">{data.bus_id}</dd>
+                  <dt className="text-slate-500">Student Status</dt>
+                  <dd className={`font-semibold ${
+                    data.student_status === "boarded" || data.student_status === "arrived_school" || data.student_status === "dropped"
+                      ? "text-green-600"
+                      : data.student_status === "absent"
+                        ? "text-red-600"
+                        : "text-amber-600"
+                  }`}>{getStudentStatusText(data.student_status)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-500">Bus Number</dt>
+                  <dd className="font-semibold text-slate-950">{data.bus_number || "Not assigned"}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-slate-500">Stop</dt>
@@ -396,22 +551,18 @@ export default function ParentDashboard() {
             <div className="dashboard-card p-5">
               <h2 className="text-lg font-bold text-slate-950">Attendance timeline</h2>
               <div className="mt-4 space-y-3">
-                {history.length === 0 ? (
+                {getTimelineItems().length === 0 ? (
                   <p className="text-sm text-slate-500">No attendance events yet.</p>
                 ) : (
-                  history.map((item, index) => (
+                  getTimelineItems().map((item, index) => (
                     <div key={index} className="flex gap-3 border-b border-slate-100 pb-3 last:border-0">
-                      <span
-                        className={`mt-1 h-2.5 w-2.5 rounded-full ${
-                          item.status === "boarded" ? "bg-green-500" : "bg-amber-500"
-                        }`}
-                      />
+                      <span className={`mt-1.5 h-2.5 w-2.5 rounded-full ${item.color}`} />
                       <div>
                         <p className="font-semibold text-slate-950">
-                          {item.status === "boarded" ? "Boarded" : "Dropped safely"}
+                          {item.label}
                         </p>
-                        <p className="text-sm text-slate-500">
-                          {new Date(item.updated_at).toLocaleString()}
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {item.time}
                         </p>
                       </div>
                     </div>
