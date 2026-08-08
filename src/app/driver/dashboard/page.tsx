@@ -5,32 +5,25 @@ import { useEffect, useState } from "react";
 import { socket } from "@/lib/socket";
 import { BrandLogo } from "@/components/BrandLogo";
 
-
 type Student = {
+  id: string;
 
-id: string;
+  student_id: string;
 
-student_id: string;
+  student_name: string;
 
-student_name: string;
+  stop_id: string;
 
-stop_id: string;
+  stop_order: number;
 
-stop_order: number;
+  stop_name: string;
 
-stop_name: string;
+  status: "waiting" | "boarded" | "arrived_school" | "dropped" | "absent";
 
-status:
-  | "waiting"
-  | "boarded"
-  | "arrived_school"
-  | "dropped"
-  | "absent";
+  pickup_time: string | null;
 
-pickup_time: string | null;
-
-drop_time: string | null;
-}
+  drop_time: string | null;
+};
 
 type School = {
   latitude: number;
@@ -60,11 +53,13 @@ export default function DriverDashboard() {
     null,
   );
   const [tracking, setTracking] = useState(false);
+  const [simulationRunning, setSimulationRunning] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [school, setSchool] = useState<School | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [completedStops, setCompletedStops] = useState<string[]>([]);
   const [tripStatus, setTripStatus] = useState<TripStatus | null>(null);
+  // const [arrivedAtSchool, setArrivedAtSchool] = useState(false);
 
   const fetchStudents = async () => {
     try {
@@ -73,15 +68,14 @@ export default function DriverDashboard() {
       setStudents(data.students);
       setTripStatus(data.trip_status);
       const progressRes = await fetch("/api/driver/stop-progress");
-const progressData = await progressRes.json();
+      const progressData = await progressRes.json();
 
-setCompletedStops(progressData.completedStops);
+      setCompletedStops(progressData.completedStops);
     } catch (error) {
       console.error(error);
     }
   };
   useEffect(() => {
-
     fetchStudents();
 
     const fetchSchool = async () => {
@@ -177,192 +171,463 @@ setCompletedStops(progressData.completedStops);
   }
 
   const pickupStudent = async (attendanceId: string) => {
-  await fetch("/api/driver/pickup", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      attendanceId,
-    }),
-  });
+    await fetch("/api/driver/pickup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        attendanceId,
+      }),
+    });
 
-  fetchStudents();
+    fetchStudents();
+  };
+
+  const markAbsent = async (attendanceId: string) => {
+  try {
+    const res = await fetch("/api/driver/absent", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        attendanceId,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || "Failed to mark student absent.");
+      return;
+    }
+
+    await fetchStudents();
+  } catch (error) {
+    console.error("Failed to mark student absent:", error);
+    alert("Something went wrong while marking student absent.");
+  }
 };
 
-const markAbsent = async (attendanceId: string) => {
-  await fetch("/api/driver/absent", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      attendanceId,
-    }),
-  });
+  const markArrivedAtSchool = async () => {
+    try {
+      const res = await fetch("/api/driver/arrived-school", {
+        method: "POST",
+      });
 
-  fetchStudents();
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Failed to mark students as arrived at school.");
+        return;
+      }
+
+      await fetchStudents();
+
+      // setArrivedAtSchool(true);
+
+      alert("Students marked as arrived at school.");
+    } catch (error) {
+      console.error(error);
+      alert("Something went wrong while marking students as arrived.");
+    }
+  };
+
+  const startDropTrip = async () => {
+  if (!allBoardedStudentsArrived) {
+    alert("Mark students as arrived at school first.");
+    return;
+  }
+
+  await updateTripStatus("drop");
 };
 
-const markArrivedAtSchool = async () => {
-  await fetch("/api/driver/arrived-school", {
-    method: "POST",
-  });
+  // const dropAllStudents = async () => {
+  //   await fetch("/api/driver/drop-all", {
+  //     method: "POST",
+  //   });
 
-  fetchStudents();
-};
+  //   fetchStudents();
+  // };
 
-const dropAllStudents = async () => {
-  await fetch("/api/driver/drop-all", {
-    method: "POST",
-  });
+  const dropStudent = async (attendanceId: string) => {
+    await fetch("/api/driver/drop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        attendanceId,
+      }),
+    });
+    
+    fetchStudents();
+  };
+  
+  const isNearStop = (
+    busLocation: { lat: number; lng: number } | null,
+    stop: Stop | undefined,
+  ) => {
+    if (!busLocation || !stop) return false;
+  
+    const distance = Math.sqrt(
+      Math.pow(busLocation.lat - stop.lat, 2) +
+        Math.pow(busLocation.lng - stop.lng, 2),
+    );
+  
+    return distance < 0.0002;
+  };
 
-  fetchStudents();
-};
+  const currentStop = stops.find((stop) => !completedStops.includes(stop.id));
 
-const dropStudent = async (attendanceId: string) => {
-  await fetch("/api/driver/drop", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      attendanceId,
-    }),
-  });
+  const dropStops = stops.filter((stop) =>
+    students.some(
+      (student) =>
+        student.stop_id === stop.id && student.status === "arrived_school",
+    ),
+  );
 
-  fetchStudents();
-};
+  const currentDropStop = dropStops[0];
 
-const currentStop = stops.find(
-  (stop) => !completedStops.includes(stop.id)
+  const studentsAtCurrentDropStop = currentDropStop
+    ? students.filter(
+        (student) =>
+          student.stop_id === currentDropStop.id &&
+          student.status === "arrived_school",
+      )
+    : [];
+  
+    
+  const isAtCurrentDropStop = isNearStop(
+  location,
+  currentDropStop,
 );
 
-const studentsAtCurrentStop = currentStop
-  ? students.filter(
-      (student) => student.stop_id === currentStop.id
-    )
-  : [];
+  const studentsAtCurrentStop = currentStop
+    ? students.filter((student) => student.stop_id === currentStop.id)
+    : [];
 
-const allStudentsHandled =
-  studentsAtCurrentStop.every(
-    (student) =>
-      student.status === "boarded" ||
-      student.status === "absent"
-);
+  const allStopsCompleted =
+    stops.length > 0 && completedStops.length === stops.length;
 
-const updateTripStatus = async (
-  status: Exclude<TripStatus, "idle">
-) => {
-  await fetch("/api/driver/trip-status", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      status,
-    }),
-  });
+  const allBoardedStudentsArrived = students
+    .filter((student) => student.status !== "absent")
+    .every((student) => student.status === "arrived_school");
 
-  setTripStatus(status);
-};
+  const allStudentsDropped = students
+    .filter((student) => student.status !== "absent")
+    .every((student) => student.status === "dropped");
+
+  const dropCompletedStops = [
+  ...new Set(
+    students
+      .filter((student) => student.status === "dropped")
+      .map((student) => student.stop_id)
+  ),
+];
+
+  const allStudentsHandled = studentsAtCurrentStop.every(
+    (student) => student.status === "boarded" || student.status === "absent",
+  );
+
+  const updateTripStatus = async (status: Exclude<TripStatus, "idle">) => {
+    await fetch("/api/driver/trip-status", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        status,
+      }),
+    });
+
+    setTripStatus(status);
+  };
+
 
   const startSimulation = async () => {
-    if (!school || stops.length === 0) return;
-    // Don't clear completed stops.
-// They are restored from the database.
+  if (!school || stops.length === 0 || simulationRunning) return;
+
+  setSimulationRunning(true);
+
+  try {
+    // If the trip is idle, start pickup automatically.
+    if (tripStatus === "idle") {
+      await updateTripStatus("pickup");
+    }
 
     const schoolPoint = {
       lat: school.latitude,
       lng: school.longitude,
     };
 
-    const route = [
-      schoolPoint,
-      ...stops.map((stop) => ({
-        lat: stop.lat,
-        lng: stop.lng,
-      })),
-      schoolPoint, // Return to school
-    ];
+    // Move the simulated bus between two points.
+    const moveToPoint = async (
+      start: { lat: number; lng: number },
+      end: { lat: number; lng: number },
+    ) => {
+      const points = interpolatePoints(start, end, 80);
 
-    let path: { lat: number; lng: number }[] = [];
+      for (const point of points) {
+        setLocation(point);
 
-    for (let i = 0; i < route.length - 1; i++) {
-      path.push(...interpolatePoints(route[i], route[i + 1], 80));
-    }
-
-    let index = 0;
-
-    const timer = setInterval(async () => {
-      if (index >= path.length) {
-        clearInterval(timer);
-
-        // Wait a moment so the user can see the bus at school
-        setTimeout(() => {
-          setCompletedStops([]);
-          setLocation({
-            lat: school.latitude,
-            lng: school.longitude,
+        try {
+          await fetch("/api/driver/location", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              lat: point.lat,
+              lng: point.lng,
+              speed: 35,
+            }),
           });
 
-          alert("Trip Completed! Bus returned to school.");
-        }, 1500);
+          socket.emit("bus-location", point);
+        } catch (error) {
+          console.error("Simulation location error:", error);
+        }
 
-        return;
+        await new Promise((resolve) =>
+          setTimeout(resolve, 300),
+        );
       }
+    };
 
-      const point = path[index];
+    // =====================================================
+    // WAIT FOR PICKUP STOP
+    // =====================================================
 
-      setLocation(point);
+    const waitForPickupStop = async (stopId: string) => {
+      while (true) {
+        const res = await fetch("/api/driver/today");
 
-      for (const stop of stops) {
-        const distance = Math.sqrt(
-          Math.pow(point.lat - stop.lat, 2) + Math.pow(point.lng - stop.lng, 2),
+        if (!res.ok) {
+          throw new Error("Failed to fetch today's trip data");
+        }
+
+        const data: TodayResponse = await res.json();
+
+        setStudents(data.students);
+        setTripStatus(data.trip_status);
+
+        const studentsAtStop = data.students.filter(
+          (student) => student.stop_id === stopId,
         );
 
-        if (
-    distance < 0.0002 &&
-    allStudentsHandled
-) {
-    if (!completedStops.includes(stop.id)) {
+        const handled =
+          studentsAtStop.length === 0 ||
+          studentsAtStop.every(
+            (student) =>
+              student.status === "boarded" ||
+              student.status === "absent",
+          );
 
-    await fetch("/api/driver/stop-progress", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            stopId: stop.id,
-        }),
-    });
+        if (handled) {
+          return;
+        }
 
-    setCompletedStops((prev) => [...prev, stop.id]);
-
-}}
+        // Stay at the stop until driver handles everyone.
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000),
+        );
       }
+    };
 
+    // =====================================================
+    // WAIT FOR DRIVER TO START DROP TRIP
+    // =====================================================
+
+    const waitForDropTrip = async () => {
+      while (true) {
+        const res = await fetch("/api/driver/today");
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch today's trip data");
+        }
+
+        const data: TodayResponse = await res.json();
+
+        setStudents(data.students);
+        setTripStatus(data.trip_status);
+
+        if (data.trip_status === "drop") {
+          return data.students;
+        }
+
+        if (data.trip_status === "completed") {
+          return null;
+        }
+
+        // Driver still needs to:
+        // Reached School
+        // Mark Arrived at School
+        // Start Drop Trip
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000),
+        );
+      }
+    };
+
+    // =====================================================
+    // WAIT FOR STUDENTS TO BE DROPPED
+    // =====================================================
+
+    const waitForDropStop = async (stopId: string) => {
+      while (true) {
+        const res = await fetch("/api/driver/today");
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch today's trip data");
+        }
+
+        const data: TodayResponse = await res.json();
+
+        setStudents(data.students);
+        setTripStatus(data.trip_status);
+
+        const studentsAtStop = data.students.filter(
+          (student) =>
+            student.stop_id === stopId &&
+            student.status === "arrived_school",
+        );
+
+        // Everyone who needs to be dropped at this stop
+        // must be marked dropped by the driver.
+        if (studentsAtStop.length === 0) {
+          return;
+        }
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000),
+        );
+      }
+    };
+
+    // =====================================================
+    // PICKUP ROUTE
+    // =====================================================
+
+    let previousPoint = schoolPoint;
+
+    for (const stop of stops) {
+      // Move to pickup stop.
+      await moveToPoint(previousPoint, {
+        lat: stop.lat,
+        lng: stop.lng,
+      });
+
+      // STOP and wait for Pickup / Absent.
+      await waitForPickupStop(stop.id);
+
+      // Save completed pickup stop.
       try {
-        await fetch("/api/driver/location", {
+        await fetch("/api/driver/stop-progress", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            lat: point.lat,
-            lng: point.lng,
-            speed: 35,
+            stopId: stop.id,
           }),
         });
 
-        socket.emit("bus-location", point);
-      } catch (err) {
-        console.error(err);
+        setCompletedStops((prev) =>
+          prev.includes(stop.id)
+            ? prev
+            : [...prev, stop.id],
+        );
+      } catch (error) {
+        console.error(
+          "Failed to save stop progress:",
+          error,
+        );
       }
 
-      index++;
-    }, 300);
-  };
+      previousPoint = {
+        lat: stop.lat,
+        lng: stop.lng,
+      };
+    }
+
+    // =====================================================
+    // RETURN TO SCHOOL
+    // =====================================================
+
+    await moveToPoint(previousPoint, schoolPoint);
+
+    setLocation(schoolPoint);
+
+    await fetchStudents();
+
+    // =====================================================
+    // WAIT FOR DRIVER TO START DROP
+    // =====================================================
+
+    const dropStudents = await waitForDropTrip();
+
+    if (!dropStudents) {
+      return;
+    }
+
+    // =====================================================
+    // DROP ROUTE
+    // =====================================================
+
+    /*
+     * Find the stops that contain students who need
+     * to be dropped.
+     *
+     * Keep the original route order.
+     */
+    const dropStops = stops.filter((stop) =>
+      dropStudents.some(
+        (student) =>
+          student.stop_id === stop.id &&
+          student.status === "arrived_school",
+      ),
+    );
+
+    previousPoint = schoolPoint;
+
+    for (const stop of dropStops) {
+      // Move to student's home stop.
+      await moveToPoint(previousPoint, {
+        lat: stop.lat,
+        lng: stop.lng,
+      });
+
+      // STOP and wait for driver to click Drop.
+      await waitForDropStop(stop.id);
+
+      previousPoint = {
+        lat: stop.lat,
+        lng: stop.lng,
+      };
+    }
+
+    // =====================================================
+    // RETURN TO SCHOOL AFTER DROP
+    // =====================================================
+
+    await moveToPoint(previousPoint, schoolPoint);
+
+    setLocation(schoolPoint);
+
+    await fetchStudents();
+
+    alert(
+      "Drop route completed. Bus has returned to school.",
+    );
+  } catch (error) {
+    console.error("Simulation failed:", error);
+    alert("Simulation failed.");
+  } finally {
+    setSimulationRunning(false);
+  }
+};
 
   return (
     <main className="dashboard-shell">
@@ -413,53 +678,77 @@ const updateTripStatus = async (
               />
               {tracking ? "Stop Tracking" : "Start Tracking"}
             </button>
-            <button className="btn btn-green" onClick={startSimulation}>
-              Start Simulation
-            </button>
+            <button
+  className="btn btn-green"
+  onClick={startSimulation}
+  disabled={simulationRunning}
+>
+  {simulationRunning ? "Simulation Running..." : "Start Simulation"}
+</button>
             {tripStatus === "idle" && (
-  <button
-    className="btn btn-green"
-    onClick={() => updateTripStatus("pickup")}
-  >
-    Start Pickup
-  </button>
-)}
+              <button
+                className="btn btn-green"
+                onClick={() => updateTripStatus("pickup")}
+              >
+                Start Pickup
+              </button>
+            )}
 
-{tripStatus === "pickup" && (
-  <button
-    className="btn btn-yellow"
-    onClick={() => updateTripStatus("at_school")}
-  >
-    Reached School
-  </button>
-)}
+            {tripStatus === "pickup" && (
+              <button
+                onClick={() => updateTripStatus("at_school")}
+                disabled={!allStopsCompleted}
+                className={`rounded-lg px-4 py-2 font-medium transition ${
+                  allStopsCompleted
+                    ? "bg-green-600 text-white hover:bg-green-700"
+                    : "cursor-not-allowed bg-gray-300 text-gray-600"
+                }`}
+              >
+                Reached School
+              </button>
+            )}
 
-{tripStatus === "at_school" && (
+            {tripStatus === "at_school" && (
   <>
-    <button
-      className="btn btn-green"
-      onClick={markArrivedAtSchool}
-    >
-      Mark Arrived at School
-    </button>
+    {!allBoardedStudentsArrived && (
+      <button
+        className="btn btn-green"
+        onClick={markArrivedAtSchool}
+      >
+        Mark Arrived at School
+      </button>
+    )}
 
-    <button
-      className="btn btn-blue"
-      onClick={() => updateTripStatus("drop")}
-    >
-      Start Drop Trip
-    </button>
+    {allBoardedStudentsArrived && (
+      <button
+        className="btn btn-blue"
+        onClick={startDropTrip}
+      >
+        Start Drop Trip
+      </button>
+    )}
   </>
 )}
 
-{tripStatus === "drop" && (
-  <button
-    className="btn btn-red"
-    onClick={() => updateTripStatus("completed")}
-  >
-    Finish Trip
-  </button>
-)}
+            {tripStatus === "drop" && (
+              <button
+                className="btn btn-red"
+                disabled={!allStudentsDropped}
+                onClick={() => updateTripStatus("completed")}
+              >
+                Finish Trip
+              </button>
+            )}
+            {tripStatus === "drop" && !allStudentsDropped && (
+              <p className="mt-2 text-sm text-amber-600">
+                Drop all students before finishing the trip.
+              </p>
+            )}
+            {tripStatus === "pickup" && !allStopsCompleted && (
+              <p className="mt-2 text-sm text-amber-600">
+                Complete all route stops before reaching school.
+              </p>
+            )}
           </header>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -474,25 +763,52 @@ const updateTripStatus = async (
                   </p>
                 </div>
                 <span
-                  className={`status-pill ${
-                    tracking
-                      ? "bg-green-50 text-green-700"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full ${tracking ? "bg-green-500" : "bg-slate-400"}`}
-                  />
-                  {tracking ? "Broadcasting" : "Idle"}
-                </span>
+  className={`status-pill ${
+    tripStatus === "pickup"
+      ? "bg-blue-50 text-blue-700"
+      : tripStatus === "at_school"
+        ? "bg-green-50 text-green-700"
+        : tripStatus === "drop"
+          ? "bg-orange-50 text-orange-700"
+          : tripStatus === "completed"
+            ? "bg-green-50 text-green-700"
+            : "bg-slate-100 text-slate-600"
+  }`}
+>
+  <span
+    className={`h-2 w-2 rounded-full ${
+      tripStatus === "pickup"
+        ? "bg-blue-500"
+        : tripStatus === "at_school"
+          ? "bg-green-500"
+          : tripStatus === "drop"
+            ? "bg-orange-500"
+            : tripStatus === "completed"
+              ? "bg-green-500"
+              : "bg-slate-400"
+    }`}
+  />
+
+  {tripStatus === "pickup"
+    ? "Pickup"
+    : tripStatus === "at_school"
+      ? "At School"
+      : tripStatus === "drop"
+        ? "Drop"
+        : tripStatus === "completed"
+          ? "Completed"
+          : "Idle"}
+</span>
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
                 <DriverMap
-                  location={location}
-                  stops={stops}
-                  school={school}
-                  completedStops={completedStops}
-                />
+  location={location}
+  stops={stops}
+  school={school}
+  completedStops={completedStops}
+  dropCompletedStops={dropCompletedStops}
+  tripStatus={tripStatus ?? "idle"}
+/>
               </div>
             </section>
 
@@ -501,9 +817,10 @@ const updateTripStatus = async (
                 <h2 className="text-lg font-bold text-slate-950">
                   Driver status
                 </h2>
-                <span>Trip Status
-
-{tripStatus}</span>
+                <span>
+                  Trip Status
+                  {tripStatus}
+                </span>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="dashboard-card-muted p-3">
                     <p className="text-xs font-bold uppercase text-slate-400">
@@ -579,101 +896,133 @@ const updateTripStatus = async (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
-  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-    Current Stop
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    Current Stop
+                  </p>
+
+                  <h3 className="mt-1 text-xl font-bold text-slate-900">
+                    📍{" "}
+                    {tripStatus === "drop"
+                      ? (currentDropStop?.name ?? "All Students Dropped")
+                      : (currentStop?.name ?? "Trip Completed")}
+                      {tripStatus === "drop" && currentDropStop && (
+  <p className="mt-1 text-sm font-medium text-slate-500">
+    {isAtCurrentDropStop
+      ? "Bus has reached this stop."
+      : "Drive to this stop to drop students."}
   </p>
-
-  <h3 className="mt-1 text-xl font-bold text-slate-900">
-    📍 {currentStop?.name ?? "Trip Completed"}
-  </h3>
-
-  <p className="mt-2 text-sm text-slate-600">
-    {studentsAtCurrentStop.length} student(s)
-  </p>
-</div>
-{!allStudentsHandled &&
-currentStop && (
-<div className="rounded-lg bg-yellow-50 border border-yellow-300 p-3 mb-4">
-
-⚠ Please mark every student as
-Pickup or Absent before leaving this stop.
-
-</div>
 )}
+                  </h3>
+
+                  <p className="mt-2 text-sm text-slate-600">
+                    {tripStatus === "drop"
+                      ? studentsAtCurrentDropStop.length
+                      : studentsAtCurrentStop.length}{" "}
+                    student(s)
+                  </p>
+                </div>
+                {!allStudentsHandled && currentStop && (
+                  <div className="rounded-lg bg-yellow-50 border border-yellow-300 p-3 mb-4">
+                    ⚠ Please mark every student as Pickup or Absent before
+                    leaving this stop.
+                  </div>
+                )}
                 <h2 className="text-lg font-bold text-slate-950">
                   Current Stop Students
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Mark students as Picked or Absent for the current stop.
+                  {tripStatus === "drop"
+                    ? "Mark students as dropped at their stop."
+                    : "Mark students as Picked or Absent for the current stop."}
                 </p>
               </div>
               <span className="status-pill bg-amber-50 text-amber-700">
-                {studentsAtCurrentStop.length} students
+                {tripStatus === "drop"
+                  ? studentsAtCurrentDropStop.length
+                  : studentsAtCurrentStop.length}{" "}
+                students
               </span>
             </div>
 
             <div className="mt-5 grid gap-3 md:grid-cols-2">
-              {studentsAtCurrentStop.length === 0 ? (
+              {(tripStatus === "drop"
+                ? studentsAtCurrentDropStop
+                : studentsAtCurrentStop
+              ).length === 0 ? (
                 <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
-                  No students are waiting at this stop.
+                  {tripStatus === "drop"
+                    ? "No students need to be dropped at this stop."
+                    : "No students are waiting at this stop."}
                 </p>
               ) : (
-                studentsAtCurrentStop.map((student) => (
+                (tripStatus === "drop"
+                  ? studentsAtCurrentDropStop
+                  : studentsAtCurrentStop
+                ).map((student) => (
                   <div
                     key={student.student_id}
                     className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>
-                      <p className="font-bold text-slate-950">{student.student_name}</p>
-                      
+                      <p className="font-bold text-slate-950">
+                        {student.student_name}
+                      </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
                       {student.status === "waiting" && (
-  <>
+                        <>
+                          <button
+                            className="btn btn-green"
+                            onClick={() => pickupStudent(student.id)}
+                          >
+                            Pickup
+                          </button>
+
+                          <button
+                            className="btn btn-gray"
+                            onClick={() => markAbsent(student.id)}
+                          >
+                            Absent
+                          </button>
+                        </>
+                      )}
+
+                      {tripStatus === "drop" &&
+  student.status === "arrived_school" &&
+  isAtCurrentDropStop && (
     <button
-      className="btn btn-green"
-      onClick={() => pickupStudent(student.id)}
+      className="btn btn-red"
+      onClick={() => dropStudent(student.id)}
     >
-      Pickup
+      Drop
     </button>
-
-    <button
-      className="btn btn-gray"
-      onClick={() => markAbsent(student.id)}
-    >
-      Absent
-    </button>
-  </>
-)}
-
-{tripStatus === "drop" &&
- student.status === "arrived_school" && (
-  <button
-    className="btn btn-red"
-    onClick={() => dropStudent(student.id)}
-  >
-    Drop
-  </button>
-)}
-
-{student.status === "dropped" && (
-    <span className="font-semibold text-green-600">
-        ✔ Completed
+  )}
+  {tripStatus === "drop" &&
+  student.status === "arrived_school" &&
+  !isAtCurrentDropStop && (
+    <span className="text-sm font-semibold text-amber-600">
+      Waiting for bus to reach stop
     </span>
-)}
+  )}
 
-{student.status === "arrived_school" &&
- tripStatus !== "drop" && (
-  <span className="font-semibold text-blue-600">
-    🏫 At School
-  </span>
-)}
+                      {student.status === "dropped" && (
+                        <span className="font-semibold text-green-600">
+                          ✔ Completed
+                        </span>
+                      )}
 
-{student.status === "absent" && (
-    <span className="font-semibold text-red-600">
-        ❌ Absent
-    </span>
-)}
+                      {student.status === "arrived_school" &&
+                        tripStatus !== "drop" && (
+                          <span className="font-semibold text-blue-600">
+                            🏫 At School
+                          </span>
+                        )}
+
+                      {student.status === "absent" && (
+                        <span className="font-semibold text-red-600">
+                          ❌ Absent
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))

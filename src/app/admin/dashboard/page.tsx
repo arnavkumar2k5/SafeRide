@@ -94,6 +94,7 @@ type Analytics = {
 type School = {
   latitude: number;
   longitude: number;
+  name: string;
 };
 
 type RouteMap = {
@@ -549,11 +550,28 @@ export default function AdminDashboard() {
 
   console.log("selectedDate:", selectedDate);
 
-attendanceHistory.forEach((item) => {
-  console.log(item.student_name, item.trip_date);
-});
+  attendanceHistory.forEach((item) => {
+    console.log(item.student_name, item.trip_date);
+  });
 
-console.log("Filtered rows:", filteredAttendance.length);
+
+  const mapBuses = liveBuses.map((lb) => {
+    const meta = data?.buses.find((b) => b.id === lb.bus_id);
+    const route = routeLines.find((r) => r.busId === lb.bus_id);
+
+    return {
+      bus_id: lb.bus_id,
+      bus_number: meta?.bus_number ?? "",
+      driver_name: lb.driver_name,
+      route_name: route?.routeName ?? "",
+      lat: lb.lat,
+      lng: lb.lng,
+      speed: null,
+      updated_at: null,
+    };
+  });
+
+  console.log("Filtered rows:", filteredAttendance.length);
 
   const addDriver = async () => {
     try {
@@ -857,7 +875,7 @@ console.log("Filtered rows:", filteredAttendance.length);
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
                 <AdminMap
-                  buses={liveBuses}
+                  buses={mapBuses}
                   routes={routeLines}
                   selectedBus={selectedTripBus}
                   // tripHistory={replayPoints}
@@ -873,42 +891,42 @@ console.log("Filtered rows:", filteredAttendance.length);
               </h2>
               <div className="mt-4 space-y-3">
                 {filteredAttendance
-  .sort(
-    (a, b) =>
-      new Date(
-        b.drop_time ??
-        b.pickup_time ??
-        b.created_at
-      ).getTime() -
-      new Date(
-        a.drop_time ??
-        a.pickup_time ??
-        a.created_at
-      ).getTime()
-  ).slice(0, 7).map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-3 border-b border-slate-100 pb-3 last:border-0"
-                  >
-                    <span
-                      className={`mt-1 h-2.5 w-2.5 rounded-full ${item.status === "boarded" ? "bg-green-500" : "bg-amber-500"}`}
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-slate-950">
-                        {item.student_name}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {item.status === "boarded" ? "Boarded" : "Dropped"} on
-                        bus {item.bus_id}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {new Date(
-                          item.drop_time ?? item.pickup_time ?? item.created_at,
-                        ).toLocaleString()}
-                      </p>
+                  .sort(
+                    (a, b) =>
+                      new Date(
+                        b.drop_time ?? b.pickup_time ?? b.created_at,
+                      ).getTime() -
+                      new Date(
+                        a.drop_time ?? a.pickup_time ?? a.created_at,
+                      ).getTime(),
+                  )
+                  .slice(0, 7)
+                  .map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex gap-3 border-b border-slate-100 pb-3 last:border-0"
+                    >
+                      <span
+                        className={`mt-1 h-2.5 w-2.5 rounded-full ${item.status === "boarded" ? "bg-green-500" : "bg-amber-500"}`}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-slate-950">
+                          {item.student_name}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {item.status === "boarded" ? "Boarded" : "Dropped"} on
+                          bus {item.bus_id}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {new Date(
+                            item.drop_time ??
+                              item.pickup_time ??
+                              item.created_at,
+                          ).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
                 {attendanceHistory.length === 0 && (
                   <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
                     No recent attendance events.
@@ -1445,13 +1463,13 @@ console.log("Filtered rows:", filteredAttendance.length);
             <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
               <div className="mb-4 flex flex-wrap gap-3">
                 <input
-  type="date"
-  value={selectedDate}
-  onChange={(e) => {
-    console.log("Selected:", e.target.value);
-    setSelectedDate(e.target.value);
-  }}
-/>
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => {
+                    console.log("Selected:", e.target.value);
+                    setSelectedDate(e.target.value);
+                  }}
+                />
 
                 <select
                   value={selectedHistoryBus}
@@ -1498,12 +1516,15 @@ console.log("Filtered rows:", filteredAttendance.length);
                     </tr>
                   ))}
                   {filteredAttendance.length === 0 && (
-  <tr>
-    <td colSpan={5} className="py-6 text-center text-slate-500">
-      No attendance found for this date.
-    </td>
-  </tr>
-)}
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="py-6 text-center text-slate-500"
+                      >
+                        No attendance found for this date.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

@@ -32,12 +32,19 @@ type Props = {
     lat: number;
     lng: number;
   } | null;
+
   stops: Stop[];
+
   school: {
     latitude: number;
     longitude: number;
   } | null;
+
   completedStops: string[];
+
+  dropCompletedStops: string[];
+
+  tripStatus: string;
 };
 
 const busIcon = new L.Icon({
@@ -71,16 +78,15 @@ export default function DriverMap({
   stops,
   school,
   completedStops,
-}: Props)  {
+  dropCompletedStops,
+  tripStatus,
+}: Props) {
   if (!school) return null;
 
   const route: [number, number][] = [
-  [school.latitude, school.longitude],
-  ...stops.map((stop): [number, number] => [
-    stop.lat,
-    stop.lng,
-  ]),
-];
+    [school.latitude, school.longitude],
+    ...stops.map((stop): [number, number] => [stop.lat, stop.lng]),
+  ];
 
   return (
     <MapContainer
@@ -93,33 +99,31 @@ export default function DriverMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
-      <Marker
-  position={[school.latitude, school.longitude]}
-  icon={schoolIcon}
->
+      <Marker position={[school.latitude, school.longitude]} icon={schoolIcon}>
         <Popup>School campus</Popup>
       </Marker>
 
       {Array.isArray(stops) &&
         stops.map((stop) => (
           <Marker
-  key={stop.id}
-  position={[stop.lat, stop.lng]}
-  icon={
-    completedStops.includes(stop.id)
+            key={stop.id}
+            position={[stop.lat, stop.lng]}
+            icon={
+  tripStatus === "drop"
+    ? dropCompletedStops.includes(stop.id)
       ? completedStopIcon
       : pendingStopIcon
-  }
->
-  <Popup>{stop.name}</Popup>
-</Marker>
+    : completedStops.includes(stop.id)
+      ? completedStopIcon
+      : pendingStopIcon
+}
+          >
+            <Popup>{stop.name}</Popup>
+          </Marker>
         ))}
 
       {location && (
-        <Marker
-  position={[location.lat, location.lng]}
-  icon={busIcon}
->
+        <Marker position={[location.lat, location.lng]} icon={busIcon}>
           <Popup>Live bus</Popup>
         </Marker>
       )}

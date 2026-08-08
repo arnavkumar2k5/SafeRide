@@ -36,44 +36,40 @@ export async function GET() {
     const bus = busResult.rows[0];
 
     // Check if today's attendance exists
-    const attendanceResult = await pool.query(
-      `
-      SELECT COUNT(*)::int AS count
-      FROM trip_attendance
-      WHERE bus_id=$1
-      AND trip_date=CURRENT_DATE
-      `,
-      [bus.id]
-    );
+    await pool.query(
+  `
+  INSERT INTO trip_attendance
+  (
+    school_id,
+    bus_id,
+    driver_id,
+    student_id,
+    trip_date,
+    status
+  )
 
-    const alreadyCreated = attendanceResult.rows[0].count;
+  SELECT
+    s.school_id,
+    s.bus_id,
+    $1,
+    s.id,
+    CURRENT_DATE,
+    'waiting'
 
-    if (alreadyCreated === 0) {
-      await pool.query(
-        `
-        INSERT INTO trip_attendance
-        (
-          school_id,
-          bus_id,
-          driver_id,
-          student_id,
-          trip_date,
-          status
-        )
+  FROM students s
 
-        SELECT
-          school_id,
-          bus_id,
-          $1,
-          id,
-          CURRENT_DATE,
-          'waiting'
-        FROM students
-        WHERE bus_id=$2
-        `,
-        [driverId, bus.id]
-      );
-    }
+  WHERE s.bus_id = $2
+
+  AND NOT EXISTS (
+    SELECT 1
+    FROM trip_attendance ta
+    WHERE ta.student_id = s.id
+      AND ta.bus_id = s.bus_id
+      AND ta.trip_date = CURRENT_DATE
+  )
+  `,
+  [driverId, bus.id]
+);
 
     const today = await pool.query(
       `
