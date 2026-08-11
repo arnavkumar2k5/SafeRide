@@ -45,6 +45,13 @@ export async function POST(req: Request){
   [busId, lat, lng, speed || 0]
 );
 
+console.log("🚌 DRIVER LOCATION UPDATE:", {
+  busId,
+  lat,
+  lng,
+});
+
+
         const io = (global as any).io;
         if (io) {
           io.emit("bus-location-update", {

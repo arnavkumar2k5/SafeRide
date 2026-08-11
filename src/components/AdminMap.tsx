@@ -124,11 +124,13 @@ export default function AdminMap({
   // replayPosition,
   school,
 }: Props) {
-  const busesToShow =
+  const safeBuses = Array.isArray(buses) ? buses : [];
+const safeRoutes = Array.isArray(routes) ? routes : [];
+
+const busesToShow =
   selectedBus === "all"
-    ? buses
-    : buses.filter((bus) => bus.bus_id === selectedBus);
-    // console.log(JSON.stringify(routes, null, 2));
+    ? safeBuses
+    : safeBuses.filter((bus) => bus.bus_id === selectedBus);
   return (
     <MapContainer
       center={[28.7041, 77.1025]}
@@ -141,26 +143,25 @@ export default function AdminMap({
       />
 
       {school && (
-        <Marker icon={schoolIcon} position={[school.latitude, school.longitude]}>
-          <Popup>
-  <div className="space-y-1">
-    <h3 className="font-semibold">{school.name}</h3>
+  <Marker
+    icon={schoolIcon}
+    position={[school.latitude, school.longitude]}
+  >
+    <Popup>
+      <p>
+        <strong>Routes:</strong> {safeRoutes.length}
+      </p>
 
-    <p>
-      <strong>Routes:</strong> {routes.length}
-    </p>
-
-    <p>
-      <strong>Buses:</strong> {buses.length}
-    </p>
-  </div>
-</Popup>
-        </Marker>
-      )}
+      <p>
+        <strong>Buses:</strong> {safeBuses.length}
+      </p>
+    </Popup>
+  </Marker>
+)}
 
       <FitBounds
   buses={busesToShow}
-  routes={routes.filter(
+  routes={safeRoutes.filter(
     (r) =>
       selectedBus === "all" || r.busId === selectedBus
   )}
@@ -205,7 +206,7 @@ export default function AdminMap({
           </Marker>
         ))}
 
-        {routes
+        {safeRoutes
   .filter(
     (route) =>
       selectedBus === "all" || route.busId === selectedBus
@@ -229,7 +230,7 @@ export default function AdminMap({
       weight={5}
     />
 ))}
-{routes
+{safeRoutes
   .filter(
     (route) =>
       selectedBus === "all" || route.busId === selectedBus

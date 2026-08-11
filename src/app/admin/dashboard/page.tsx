@@ -295,9 +295,18 @@ export default function AdminDashboard() {
       const liveRes = await fetch("/api/admin/live-buses");
 
       const routesMapRes = await fetch("/api/admin/routes-map");
-      const routesMapJson = await routesMapRes.json();
 
-      setRouteLines(routesMapJson);
+if (!routesMapRes.ok) {
+  throw new Error("Failed to fetch route map");
+}
+
+const routesMapJson = await routesMapRes.json();
+
+setRouteLines(
+  Array.isArray(routesMapJson)
+    ? routesMapJson
+    : []
+);
 
       const liveJson = await liveRes.json();
       setLiveBuses(liveJson);

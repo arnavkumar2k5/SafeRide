@@ -42,6 +42,7 @@ type TripStatus = "idle" | "pickup" | "at_school" | "drop" | "completed";
 type TodayResponse = {
   students: Student[];
   trip_status: TripStatus;
+  routeCoordinates?: [number, number][];
 };
 
 const DriverMap = dynamic(() => import("@/components/DriverMap"), {
@@ -59,6 +60,7 @@ export default function DriverDashboard() {
   const [stops, setStops] = useState<Stop[]>([]);
   const [completedStops, setCompletedStops] = useState<string[]>([]);
   const [tripStatus, setTripStatus] = useState<TripStatus | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
   // const [arrivedAtSchool, setArrivedAtSchool] = useState(false);
 
   const fetchStudents = async () => {
@@ -67,6 +69,7 @@ export default function DriverDashboard() {
       const data: TodayResponse = await res.json();
       setStudents(data.students);
       setTripStatus(data.trip_status);
+      setRouteCoordinates(data.routeCoordinates || []);
       const progressRes = await fetch("/api/driver/stop-progress");
       const progressData = await progressRes.json();
 
@@ -795,13 +798,14 @@ export default function DriverDashboard() {
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
                 <DriverMap
-  location={location}
-  stops={stops}
-  school={school}
-  completedStops={completedStops}
-  dropCompletedStops={dropCompletedStops}
-  tripStatus={tripStatus ?? "idle"}
-/>
+                  location={location}
+                  stops={stops}
+                  school={school}
+                  completedStops={completedStops}
+                  dropCompletedStops={dropCompletedStops}
+                  tripStatus={tripStatus ?? "idle"}
+                  routeCoordinates={routeCoordinates}
+                />
               </div>
             </section>
 

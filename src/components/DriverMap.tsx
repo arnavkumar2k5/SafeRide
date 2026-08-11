@@ -45,6 +45,8 @@ type Props = {
   dropCompletedStops: string[];
 
   tripStatus: string;
+
+  routeCoordinates?: [number, number][];
 };
 
 const busIcon = new L.Icon({
@@ -80,13 +82,17 @@ export default function DriverMap({
   completedStops,
   dropCompletedStops,
   tripStatus,
+  routeCoordinates,
 }: Props) {
   if (!school) return null;
 
-  const route: [number, number][] = [
-    [school.latitude, school.longitude],
-    ...stops.map((stop): [number, number] => [stop.lat, stop.lng]),
-  ];
+  const polylinePositions: [number, number][] = routeCoordinates && routeCoordinates.length > 0
+    ? routeCoordinates
+    : [
+        [school.latitude, school.longitude],
+        ...stops.map((stop): [number, number] => [stop.lat, stop.lng]),
+        [school.latitude, school.longitude]
+      ] as [number, number][];
 
   return (
     <MapContainer
@@ -128,7 +134,7 @@ export default function DriverMap({
         </Marker>
       )}
 
-      <Polyline positions={route} color="#ef4444" weight={5} />
+      <Polyline positions={polylinePositions} color="#ef4444" weight={5} />
     </MapContainer>
   );
 }

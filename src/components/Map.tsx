@@ -36,6 +36,13 @@ const studentStopIcon = new L.Icon({
   popupAnchor: [0, -32],
 });
 
+const busIcon = new L.Icon({
+  iconUrl: "/icons/bus.svg",
+  iconSize: [40, 40],
+  iconAnchor: [20, 40],
+  popupAnchor: [0, -40],
+});
+
 type Props = {
   lat: number;
   lng: number;
@@ -48,6 +55,7 @@ type Props = {
     latitude: number;
     longitude: number;
   } | null;
+  routeCoordinates?: [number, number][];
 };
 
 function FitAllMarkers({
@@ -72,7 +80,7 @@ function FitAllMarkers({
       bounds.push([stopLat, stopLng]);
     }
 
-        if (school && typeof school.latitude === "number" && typeof school.longitude === "number") {
+    if (school && typeof school.latitude === "number" && typeof school.longitude === "number") {
       bounds.push([school.latitude, school.longitude]);
     }
 
@@ -80,6 +88,21 @@ function FitAllMarkers({
   }, [lat, lng, stopLat, stopLng, school, map]);
 
   return null;
+}
+
+function findNearestIndex(coordinates: [number, number][], target: { lat: number; lng: number }) {
+  let minDistance = Infinity;
+  let nearestIndex = 0;
+
+  coordinates.forEach((coord, index) => {
+    const dist = Math.pow(coord[0] - target.lat, 2) + Math.pow(coord[1] - target.lng, 2);
+    if (dist < minDistance) {
+      minDistance = dist;
+      nearestIndex = index;
+    }
+  });
+
+  return nearestIndex;
 }
 
 export default function Map({
@@ -91,14 +114,17 @@ export default function Map({
   stopLat,
   stopLng,
   school,
+  routeCoordinates,
 }: Props) {
   const markerRef = useRef<L.Marker>(null);
-  const [routePositions, setRoutePositions] = useState<[number, number][]>([]);
+  const [fallbackRoute, setFallbackRoute] = useState<[number, number][]>([]);
 
+  // Fallback to dynamic ORS fetch ONLY if backend routeCoordinates are unavailable
   useEffect(() => {
-    const fetchRoute = async () => {
-      if (stopLat === undefined || stopLng === undefined) return;
+    if (routeCoordinates && routeCoordinates.length > 0) return;
+    if (stopLat === undefined || stopLng === undefined) return;
 
+    const fetchRoute = async () => {
       try {
         const res = await fetch(
           "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
@@ -121,14 +147,14 @@ export default function Map({
         const coords = data.features[0].geometry.coordinates;
         const formatted = coords.map((coord: number[]) => [coord[1], coord[0]]);
 
-        setRoutePositions(formatted);
+        setFallbackRoute(formatted);
       } catch (error) {
-        console.error("Route Error:", error);
+        console.error("Fallback Route Error:", error);
       }
     };
 
     fetchRoute();
-  }, [lat, lng, stopLat, stopLng]);
+  }, [lat, lng, stopLat, stopLng, routeCoordinates]);
 
   useEffect(() => {
     if (markerRef.current) {
@@ -138,6 +164,23 @@ export default function Map({
       });
     }
   }, [lat, lng]);
+
+  const safeRoute = routeCoordinates && routeCoordinates.length > 0 ? routeCoordinates : [];
+
+  let coveredCoordinates: [number, number][] = [];
+  let remainingCoordinates: [number, number][] = [];
+
+  if (safeRoute.length > 0) {
+    const busIndex = findNearestIndex(safeRoute, { lat, lng });
+    const stopIndex = (stopLat !== undefined && stopLng !== undefined)
+      ? findNearestIndex(safeRoute, { lat: stopLat, lng: stopLng })
+      : 0;
+
+    const splitIndex = Math.min(busIndex, stopIndex);
+
+    coveredCoordinates = safeRoute.slice(0, splitIndex + 1);
+    remainingCoordinates = safeRoute.slice(splitIndex);
+  }
 
   return (
     <MapContainer center={[lat, lng]} zoom={13} style={{ height: "100%", width: "100%" }}>
@@ -153,15 +196,28 @@ export default function Map({
         attribution="© OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <Polyline positions={routePositions} color="#2563eb" weight={5} />
 
-            {school && typeof school.latitude === "number" && typeof school.longitude === "number" && (
+      {/* RENDER POLYLINES */}
+      {safeRoute.length > 0 ? (
+        <>
+          {coveredCoordinates.length > 0 && (
+            <Polyline positions={coveredCoordinates} color="#10b981" weight={6} />
+          )}
+          {remainingCoordinates.length > 0 && (
+            <Polyline positions={remainingCoordinates} color="#2563eb" weight={5} />
+          )}
+        </>
+      ) : (
+        <Polyline positions={fallbackRoute} color="#2563eb" weight={5} />
+      )}
+
+      {school && typeof school.latitude === "number" && typeof school.longitude === "number" && (
         <Marker icon={schoolIcon} position={[school.latitude, school.longitude]}>
           <Popup>School campus</Popup>
         </Marker>
       )}
 
-      <Marker ref={markerRef} position={[lat, lng]}>
+      <Marker ref={markerRef} position={[lat, lng]} icon={busIcon}>
         <Popup>
           Bus Number: {busNumber || "Not assigned"}
           <br />

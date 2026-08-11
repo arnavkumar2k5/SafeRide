@@ -50,6 +50,18 @@ export async function POST(req: Request) {
       );
     }
 
+    try {
+      const io = (global as any).io;
+      if (io) {
+        io.emit("trip-status-update", {
+          busId: result.rows[0].id,
+          tripStatus: status,
+        });
+      }
+    } catch (socketError) {
+      console.error("Socket notification failed:", socketError);
+    }
+
     return NextResponse.json(result.rows[0]);
 
   } catch (error) {

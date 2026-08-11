@@ -32,7 +32,7 @@ export async function POST() {
       );
     }
 
-    await pool.query(
+    const result = await pool.query(
       `
       UPDATE trip_attendance
       SET status = 'arrived_school'
@@ -40,12 +40,30 @@ export async function POST() {
         bus_id = $1
         AND trip_date = CURRENT_DATE
         AND status = 'boarded'
+      RETURNING id, student_id, status, pickup_time, drop_time
       `,
       [bus.rows[0].id]
     );
 
+    try {
+      const io = (global as any).io;
+      if (io) {
+        for (const row of result.rows) {
+          io.emit("attendance-update", {
+            attendanceId: row.id,
+            studentId: row.student_id,
+            status: "arrived_school",
+            attendance: row,
+          });
+        }
+      }
+    } catch (socketError) {
+      console.error("Socket notification failed:", socketError);
+    }
+
     return NextResponse.json({
       success: true,
+      updatedCount: result.rowCount,
     });
 
   } catch (error) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import pool from "@/lib/db";
+import pool, { getRouteGeometry } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -68,20 +68,19 @@ ST_Y(s.location::geometry) AS lat,
 
     for (const row of result.rows) {
       if (!routes[row.bus_id]) {
+        const roadCoords = await getRouteGeometry(row.route_id, schoolLat, schoolLng);
         routes[row.bus_id] = {
-  busId: row.bus_id,
-  busNumber: row.bus_number,
-  routeId: row.route_id,
-  routeName: row.route_name,
-  coordinates: [[schoolLat, schoolLng]],
-  stops: [],
-};
+          busId: row.bus_id,
+          busNumber: row.bus_number,
+          routeId: row.route_id,
+          routeName: row.route_name,
+          coordinates: roadCoords,
+          stops: [],
+        };
       }
 
       const lat = Number(row.lat);
       const lng = Number(row.lng);
-
-      routes[row.bus_id].coordinates.push([lat, lng]);
 
       routes[row.bus_id].stops.push({
         id: row.stop_id,

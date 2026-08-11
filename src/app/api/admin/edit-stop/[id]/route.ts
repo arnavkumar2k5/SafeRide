@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../auth/[...nextauth]/route";
-import pool from "@/lib/db";
+import pool, { clearRouteCache } from "@/lib/db";
 
 export async function PUT(
   request: NextRequest,
@@ -53,7 +53,7 @@ export async function PUT(
 
     const stopResult = await pool.query(
       `
-      SELECT s.id
+      SELECT s.id, s.route_id
       FROM stops s
       JOIN routes r
         ON s.route_id = r.id
@@ -91,6 +91,9 @@ export async function PUT(
     id,
   ]
 );
+
+    const routeId = stopResult.rows[0].route_id;
+    clearRouteCache(routeId);
 
     return NextResponse.json({
       message: "Stop updated successfully",

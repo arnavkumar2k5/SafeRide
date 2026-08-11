@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import pool from "@/lib/db";
+import pool, { getRouteGeometry } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -34,6 +34,30 @@ export async function GET() {
     }
 
     const bus = busResult.rows[0];
+
+    // Check if today's attendance exists for this bus
+    const checkAttendance = await pool.query(
+      `
+      SELECT 1 
+      FROM trip_attendance 
+      WHERE bus_id = $1 AND trip_date = CURRENT_DATE 
+      LIMIT 1
+      `,
+      [bus.id]
+    );
+
+    // If starting a fresh day, reset the bus trip status to 'idle'
+    if (checkAttendance.rows.length === 0) {
+      await pool.query(
+        `
+        UPDATE buses
+        SET trip_status = 'idle'
+        WHERE id = $1
+        `,
+        [bus.id]
+      );
+      bus.trip_status = "idle";
+    }
 
     // Check if today's attendance exists
     await pool.query(
@@ -112,9 +136,26 @@ ta.drop_time
       [bus.id]
     );
 
+    const schoolLocation = await pool.query(
+      `
+      SELECT latitude, longitude
+      FROM schools
+      WHERE id = $1
+      `,
+      [bus.school_id]
+    );
+
+    let routeCoordinates: [number, number][] = [];
+    if (schoolLocation.rows.length > 0) {
+      const schoolLat = Number(schoolLocation.rows[0].latitude);
+      const schoolLng = Number(schoolLocation.rows[0].longitude);
+      routeCoordinates = await getRouteGeometry(bus.route_id, schoolLat, schoolLng);
+    }
+
     return NextResponse.json({
       students: today.rows,
       trip_status: bus.trip_status || "idle",
+      routeCoordinates,
     });
   } catch (err) {
     console.error(err);

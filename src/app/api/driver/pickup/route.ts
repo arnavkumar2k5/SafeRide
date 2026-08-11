@@ -16,36 +16,42 @@ export async function POST(req: Request) {
 
     const { attendanceId } = await req.json();
 
+    const driverId = session.user.id;
+
     const result = await pool.query(
       `
-      UPDATE trip_attendance
+      UPDATE trip_attendance ta
       SET
         status='boarded',
         pickup_time=NOW()
-      WHERE
-        id=$1
-        AND status='waiting'
-      RETURNING *
+      FROM buses b
+      WHERE ta.id=$1
+        AND ta.bus_id = b.id
+        AND b.driver_id = $2
+        AND ta.trip_date = CURRENT_DATE
+        AND ta.status='waiting'
+      RETURNING ta.*
       `,
-      [attendanceId]
+      [attendanceId, driverId]
     );
 
-    if (result.rowCount === 0) {
+    if (result.rows.length === 0) {
       return NextResponse.json(
-        { error: "Student already boarded." },
+        { error: "Student not found, already boarded, or not assigned to your bus today." },
         { status: 400 }
       );
     }
 
     const io = (global as any).io;
 
-if (io) {
-  io.emit("attendance-update", {
-    attendanceId,
-    status: "boarded",
-    attendance: result.rows[0],
-  });
-}
+    if (io) {
+      io.emit("attendance-update", {
+        attendanceId,
+        studentId: result.rows[0].student_id,
+        status: "boarded",
+        attendance: result.rows[0],
+      });
+    }
 
     return NextResponse.json({
       success: true,

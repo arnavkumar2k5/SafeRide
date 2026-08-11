@@ -87,7 +87,10 @@ export default function ParentDashboard() {
     schoolRef.current = school;
   }, [school]);
 
-  const getStudentStatusText = (status?: string) => {
+  const getStudentStatusText = (status?: string, busTripStatus?: string) => {
+    if (status === "arrived_school" && busTripStatus === "drop") {
+      return "Returning Home";
+    }
     switch (status) {
       case "waiting":
         return "Waiting for pickup";
@@ -152,12 +155,23 @@ export default function ParentDashboard() {
     }
 
     // 5. arrived_school
-    if (data.student_status === "arrived_school") {
+    if (data.student_status === "arrived_school" || data.student_status === "dropped") {
       items.push({
         status: "arrived_school",
         label: "At School",
         time: "Today",
         color: "bg-blue-500",
+      });
+    }
+
+    // 6. returning_home
+    const isReturning = data.student_status === "arrived_school" && data.bus_trip_status === "drop";
+    if (isReturning || data.student_status === "dropped") {
+      items.push({
+        status: "returning_home",
+        label: "Returning Home",
+        time: "Today",
+        color: "bg-orange-500",
       });
     }
 
@@ -206,19 +220,22 @@ export default function ParentDashboard() {
         setData(json);
 
         if (json.bus_id) {
-          const locRes = await fetch(`/api/bus/${json.bus_id}`);
+          let locJson = null;
+          try {
+            const locRes = await fetch(`/api/bus/${json.bus_id}`);
 
-          if (!locRes.ok) {
-            const errorData = await locRes.json();
-            setError(errorData.error || "Failed to fetch bus location");
-            setLoading(false);
-            return;
+            if (locRes.ok) {
+              locJson = await locRes.json();
+              setLocation(locJson);
+            } else {
+              setLocation(null);
+            }
+          } catch (locErr) {
+            console.error("Failed to fetch initial bus location:", locErr);
+            setLocation(null);
           }
 
-          const locJson = await locRes.json();
-          setLocation(locJson);
-
-          if (json.stop_lat !== undefined && json.stop_lng !== undefined) {
+          if (locJson && json.stop_lat !== undefined && json.stop_lng !== undefined) {
             try {
               const res = await fetch(
                 "https://api.openrouteservice.org/v2/directions/driving-car",
@@ -283,60 +300,107 @@ if (schoolRes.ok) {
     fetchData();
 
     socket.on("bus-location-update", async (liveData: BusLocationUpdate) => {
+  console.log("🚌 PARENT RECEIVED BUS LOCATION:", liveData);
+
+  const currentData = dataRef.current;
+
+  console.log("👤 PARENT BUS ID:", currentData?.bus_id);
+  console.log("🚌 EVENT BUS ID:", liveData.busId);
+
+  if (!currentData) {
+    console.log("❌ No parent data available yet");
+    return;
+  }
+
+  if (liveData.busId !== currentData.bus_id) {
+    console.log("❌ Bus ID mismatch");
+    return;
+  }
+
+  console.log("✅ Bus ID matched. Updating parent location.");
+
+  setLocation({
+    lat: liveData.lat,
+    lng: liveData.lng,
+  });
+
+  if (
+    currentData.stop_lat !== undefined &&
+    currentData.stop_lng !== undefined
+  ) {
+    try {
+      const res = await fetch(
+        "https://api.openrouteservice.org/v2/directions/driving-car",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
+          },
+          body: JSON.stringify({
+            coordinates: [
+              [liveData.lng, liveData.lat],
+              [currentData.stop_lng, currentData.stop_lat],
+            ],
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        console.error("❌ ORS request failed:", res.status);
+        return;
+      }
+
+      const routeData = await res.json();
+
+      if (!routeData.routes?.[0]) {
+        console.error("❌ No route returned from ORS");
+        return;
+      }
+
+      const summary = routeData.routes[0].summary;
+
+      setEta({
+        distance: (summary.distance / 1000).toFixed(2),
+        duration: (summary.duration / 60).toFixed(0),
+      });
+
+      const distance = summary.distance;
+
+      if (distance <= 50) {
+        setBusArrived(true);
+        setBusNear(false);
+      } else if (distance <= 500) {
+        setBusNear(true);
+        setBusArrived(false);
+      } else {
+        setBusArrived(false);
+        setBusNear(false);
+      }
+    } catch (error) {
+      console.error("❌ ETA error:", error);
+    }
+  }
+});
+
+    socket.on("bus-near-stop", (liveData: BusNearStopEvent & { studentId?: string }) => {
       const currentData = dataRef.current;
-      const currentSchool = schoolRef.current;
-
-      if (currentData && liveData.busId === currentData.bus_id) {
-        setLocation({ lat: liveData.lat, lng: liveData.lng });
-
-        if (currentSchool && currentData.stop_lat !== undefined && currentData.stop_lng !== undefined) {
-          try {
-            const res = await fetch(
-              "https://api.openrouteservice.org/v2/directions/driving-car",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
-                },
-                body: JSON.stringify({
-                  coordinates: [
-                    [liveData.lng, liveData.lat],
-                    [currentData.stop_lng, currentData.stop_lat],
-                  ],
-                }),
-              },
-            );
-
-            const routeData = await res.json();
-            const summary = routeData.routes[0].summary;
-
-            setEta({
-              distance: (summary.distance / 1000).toFixed(2),
-              duration: (summary.duration / 60).toFixed(0),
-            });
-
-            const distance = summary.distance;
-
-            if (distance <= 50) {
-              setBusArrived(true);
-              setBusNear(false);
-            } else if (distance <= 500) {
-              setBusNear(true);
-              setBusArrived(false);
-            } else {
-              setBusArrived(false);
-              setBusNear(false);
-            }
-          } catch (error) {
-            console.error("ETA error:", error);
-          }
-        }
+      if (currentData && liveData.studentId === currentData.student_id) {
+        showNotification("Bus Near Stop", `Bus is near ${liveData.stopName}`);
       }
     });
 
-    socket.on("bus-near-stop", (data: BusNearStopEvent) => {
-      showNotification("Bus Near Stop", `Bus is near ${data.stopName}`);
+    socket.on("trip-status-update", (liveData: { busId: string; tripStatus: string }) => {
+      const currentData = dataRef.current;
+      if (currentData && liveData.busId === currentData.bus_id) {
+        setData((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            bus_trip_status: liveData.tripStatus,
+          };
+        });
+      }
     });
 
     socket.on("attendance-update", (liveData: StudentStatusEvent) => {
@@ -371,6 +435,7 @@ if (schoolRes.ok) {
       socket.off("bus-location-update");
       socket.off("bus-near-stop");
       socket.off("attendance-update");
+      socket.off("trip-status-update");
     };
     // The socket subscriptions intentionally match the original mount-only flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -396,7 +461,7 @@ if (schoolRes.ok) {
     );
   }
 
-  if (!data || !location || !location.lat || !location.lng) {
+  if (!data) {
     return (
       <main className="dashboard-shell flex min-h-screen items-center justify-center p-6">
         <div className="dashboard-card px-6 py-5 text-slate-600">
@@ -449,7 +514,7 @@ if (schoolRes.ok) {
                     ? "bg-red-500"
                     : "bg-amber-500"
               }`} />
-              Student: {getStudentStatusText(data.student_status)}
+              Student: {getStudentStatusText(data.student_status, data.bus_trip_status)}
             </span>
           </div>
         </header>
@@ -477,16 +542,25 @@ if (schoolRes.ok) {
               )}
             </div>
             <div className="map-shell h-[420px] sm:h-[520px]">
-              <Map
-                lat={location?.lat}
-                lng={location?.lng}
-                busId={data?.bus_id}
-                busNumber={data?.bus_number}
-                driverName={data?.driver_name}
-                stopLat={data?.stop_lat}
-                stopLng={data?.stop_lng}
-                school={school}
-              />
+              {location && location.lat && location.lng ? ( 
+                 <Map
+                  lat={location.lat}
+                  lng={location.lng}
+                  busId={data?.bus_id}
+                  busNumber={data?.bus_number}
+                  driverName={data?.driver_name}
+                  stopLat={data?.stop_lat}
+                  stopLng={data?.stop_lng}
+                  school={school}
+                  routeCoordinates={(data as any)?.route_coordinates}
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center bg-slate-50 text-slate-500 p-6 text-center">
+                  <span className="text-4xl mb-2">🚌</span>
+                  <p className="font-semibold text-slate-700">Live tracking is not active</p>
+                  <p className="text-sm mt-1 text-slate-500">The map and ETA will become visible once the bus starts its trip.</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -506,7 +580,7 @@ if (schoolRes.ok) {
                       : data.student_status === "absent"
                         ? "text-red-600"
                         : "text-amber-600"
-                  }`}>{getStudentStatusText(data.student_status)}</dd>
+                  }`}>{getStudentStatusText(data.student_status, data.bus_trip_status)}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-slate-500">Bus Number</dt>

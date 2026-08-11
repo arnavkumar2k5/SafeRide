@@ -1,4 +1,4 @@
-import pool from "@/lib/db";
+import pool, { clearRouteCache } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
@@ -122,6 +122,8 @@ await pool.query(
     schoolId,      // $6
   ]
 );
+
+    clearRouteCache(routeId);
 
     return NextResponse.json({
       message: "Stop Added",
