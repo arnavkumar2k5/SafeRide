@@ -93,19 +93,27 @@ function findNearestCoordIndex(
   return nearestIdx;
 }
 
+type LiveEtaResult = {
+  eta: { distance: string; duration: string } | null;
+  isNear: boolean;
+  isArrived: boolean;
+  isPassed: boolean;
+};
+
 function computeLiveEtaAndProximity(
   busLoc: { lat: number; lng: number },
   stopLoc: { lat: number; lng: number },
   routeCoords: [number, number][] | undefined,
   studentStatus: string | undefined,
   liveSpeed?: number,
-): {
-  eta: { distance: string; duration: string } | null;
-  isNear: boolean;
-  isArrived: boolean;
-} {
+): LiveEtaResult {
   if (studentStatus === "dropped") {
-    return { eta: null, isNear: false, isArrived: false };
+    return {
+      eta: null,
+      isNear: false,
+      isArrived: false,
+      isPassed: true,
+    };
   }
 
   const directMetersToStop = getHaversineDistanceMeters(
@@ -115,21 +123,24 @@ function computeLiveEtaAndProximity(
     stopLoc.lng,
   );
 
-  if (directMetersToStop <= 50) {
+  // 1. Bus is right at the stop (Arrival threshold)
+  if (directMetersToStop <= 60) {
     return {
-      eta: { distance: "0.00", duration: "0" },
+      eta: { distance: "0.00", duration: "Arrived" },
       isNear: false,
       isArrived: true,
+      isPassed: false,
     };
   }
 
-  let totalMeters = 0;
-
+  // 2. Road coordinate matching
   if (routeCoords && routeCoords.length > 1) {
     const busIdx = findNearestCoordIndex(routeCoords, busLoc);
     const stopIdx = findNearestCoordIndex(routeCoords, stopLoc);
 
+    // Bus is approaching parent's stop
     if (busIdx < stopIdx) {
+      let totalMeters = 0;
       for (let i = busIdx; i < stopIdx; i++) {
         totalMeters += getHaversineDistanceMeters(
           routeCoords[i][0],
@@ -138,43 +149,46 @@ function computeLiveEtaAndProximity(
           routeCoords[i + 1][1],
         );
       }
-    } else {
-      if (directMetersToStop <= 100) {
-        totalMeters = 0;
-      } else {
-        totalMeters = directMetersToStop;
-      }
+
+      const isNear = totalMeters > 60 && totalMeters <= 500;
+      const distanceKm = totalMeters / 1000;
+      const effectiveSpeedKmh =
+        liveSpeed && liveSpeed > 5 && !isNaN(liveSpeed) ? liveSpeed : 30;
+      const durationMinutes = Math.max(
+        1,
+        Math.round((distanceKm / effectiveSpeedKmh) * 60),
+      );
+
+      return {
+        eta: {
+          distance: distanceKm.toFixed(2),
+          duration: `${durationMinutes}`,
+        },
+        isNear,
+        isArrived: false,
+        isPassed: false,
+      };
     }
-  } else {
-    totalMeters = directMetersToStop;
-  }
 
-  const isArrived = totalMeters <= 50;
-  const isNear = totalMeters > 50 && totalMeters <= 500;
-
-  if (isArrived) {
+    // Bus has passed parent's stop (busIdx >= stopIdx and directMeters > 60)
     return {
-      eta: { distance: "0.00", duration: "0" },
+      eta: null,
       isNear: false,
-      isArrived: true,
+      isArrived: false,
+      isPassed: true,
     };
   }
 
-  const distanceKm = totalMeters / 1000;
-  const effectiveSpeedKmh =
-    liveSpeed && liveSpeed > 5 && !isNaN(liveSpeed) ? liveSpeed : 30;
-  const durationMinutes = Math.max(
-    1,
-    Math.round((distanceKm / effectiveSpeedKmh) * 60),
-  );
-
+  // Fallback if routeCoords are unavailable
+  const distanceKm = directMetersToStop / 1000;
   return {
     eta: {
       distance: distanceKm.toFixed(2),
-      duration: durationMinutes.toString(),
+      duration: Math.max(1, Math.round((distanceKm / 30) * 60)).toString(),
     },
-    isNear,
+    isNear: directMetersToStop <= 500,
     isArrived: false,
+    isPassed: false,
   };
 }
 
@@ -205,6 +219,7 @@ export default function ParentDashboard() {
   );
   const [busNear, setBusNear] = useState(false);
   const [busArrived, setBusArrived] = useState(false);
+  const [busPassed, setBusPassed] = useState(false);
   const [studentNotification, setStudentNotification] = useState<{
     name: string;
     status: string;
@@ -397,6 +412,7 @@ export default function ParentDashboard() {
             setEta(result.eta);
             setBusNear(result.isNear);
             setBusArrived(result.isArrived);
+            setBusPassed(result.isPassed);
           }
         } else {
           setError("No bus ID found");
@@ -442,6 +458,7 @@ export default function ParentDashboard() {
         setEta(result.eta);
         setBusNear(result.isNear);
         setBusArrived(result.isArrived);
+        setBusPassed(result.isPassed);
       }
     });
 
@@ -484,6 +501,7 @@ export default function ParentDashboard() {
           setEta(null);
           setBusNear(false);
           setBusArrived(false);
+          setBusPassed(true);
         }
 
         setData((prev) => {
@@ -606,7 +624,16 @@ export default function ParentDashboard() {
                   School, student stop, route line, and live bus position.
                 </p>
               </div>
-              {eta && (
+              {data.student_status === "dropped" ? (
+                <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-1.5 text-right border border-green-200">
+                  <span className="text-green-700 font-bold text-sm">✔ Child dropped off safely</span>
+                </div>
+              ) : busArrived ? (
+                <div className="rounded-lg bg-green-50 px-3 py-1.5 text-right border border-green-200">
+                  <p className="text-xs font-semibold uppercase text-green-700">Arrival Status</p>
+                  <p className="text-sm font-bold text-green-800">Bus has arrived at your stop</p>
+                </div>
+              ) : eta ? (
                 <div className="grid grid-cols-2 gap-2 text-right">
                   <div>
                     <p className="text-xs font-semibold uppercase text-slate-400">Distance</p>
@@ -614,10 +641,17 @@ export default function ParentDashboard() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold uppercase text-slate-400">ETA</p>
-                    <p className="text-lg font-bold text-amber-600">{eta.duration} min</p>
+                    <p className="text-lg font-bold text-amber-600">{eta.duration === "Arrived" ? "Arrived" : `${eta.duration} min`}</p>
                   </div>
                 </div>
-              )}
+              ) : busPassed ? (
+                <div className="rounded-lg bg-amber-50 px-3 py-1.5 text-right border border-amber-200">
+                  <p className="text-xs font-semibold uppercase text-amber-700">Status</p>
+                  <p className="text-sm font-bold text-amber-800">
+                    Bus has passed your stop • Waiting for drop-off
+                  </p>
+                </div>
+              ) : null}
             </div>
             <div className="map-shell h-[420px] sm:h-[520px]">
               {location && location.lat && location.lng ? ( 
@@ -679,18 +713,28 @@ export default function ParentDashboard() {
               </dl>
             </div>
 
-            {(busNear || busArrived || studentNotification) && (
+            {(busNear || busArrived || busPassed || studentNotification || data.student_status === "dropped") && (
               <div className="dashboard-card p-5">
                 <h2 className="text-lg font-bold text-slate-950">Live alerts</h2>
                 <div className="mt-4 space-y-3">
-                  {busNear && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
-                      Bus is near your stop.
+                  {data.student_status === "dropped" && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">
+                      Child dropped off safely.
                     </div>
                   )}
                   {busArrived && (
                     <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-semibold text-green-800">
-                      Bus has arrived at the stop.
+                      Bus has arrived at your stop.
+                    </div>
+                  )}
+                  {busNear && !busArrived && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                      Bus is near your stop.
+                    </div>
+                  )}
+                  {busPassed && !busArrived && data.student_status !== "dropped" && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+                      Bus has passed your stop. Waiting for drop-off.
                     </div>
                   )}
                   {studentNotification && (
