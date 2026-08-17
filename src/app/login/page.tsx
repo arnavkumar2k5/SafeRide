@@ -65,20 +65,20 @@ const demos: Array<{
 }> = [
   {
     role: "admin",
-    email: "admin1@test.com",
-    password: "123456",
+    email: "admin@saferide.com",
+    password: "abc123",
     subtitle: "Inspect fleet dashboards, route tools, and school operations.",
   },
   {
     role: "parent",
-    email: "parent2@test.com",
-    password: "123456",
+    email: "parent7@saferide.com",
+    password: "abc123",
     subtitle: "Preview live ETA, attendance updates, and ride visibility.",
   },
   {
     role: "driver",
-    email: "driver1@test.com",
-    password: "123456",
+    email: "driver1@saferide.com",
+    password: "abc123",
     subtitle: "Try route execution, stops, and student status workflows.",
   },
 ];
