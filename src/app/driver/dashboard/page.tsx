@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { socket } from "@/lib/socket";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -628,28 +629,42 @@ export default function DriverDashboard() {
   return (
     <main className="dashboard-shell">
       <div className="mx-auto grid min-h-screen w-full max-w-7xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[260px_1fr] lg:px-8">
-        <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:block">
-          <BrandLogo subtitle="Driver console" />
-          <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
-            <a
-              className="block rounded-lg bg-slate-950 px-3 py-2 text-white"
-              href="#route"
+        <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <BrandLogo subtitle="Driver console" />
+            <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
+              <a
+                className="block rounded-lg bg-slate-950 px-3 py-2 text-white"
+                href="#route"
+              >
+                Route map
+              </a>
+              <a
+                className="block rounded-lg px-3 py-2 hover:bg-slate-100"
+                href="#students"
+              >
+                Student stops
+              </a>
+              <a
+                className="block rounded-lg px-3 py-2 hover:bg-slate-100"
+                href="#location"
+              >
+                Location status
+              </a>
+            </nav>
+          </div>
+          <div className="border-t border-slate-200 pt-4">
+            <Link
+              href="/account"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
             >
-              Route map
-            </a>
-            <a
-              className="block rounded-lg px-3 py-2 hover:bg-slate-100"
-              href="#students"
-            >
-              Student stops
-            </a>
-            <a
-              className="block rounded-lg px-3 py-2 hover:bg-slate-100"
-              href="#location"
-            >
-              Location status
-            </a>
-          </nav>
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Account & Profile
+            </Link>
+          </div>
         </aside>
 
         <section className="flex min-w-0 flex-col gap-4">
@@ -665,6 +680,17 @@ export default function DriverDashboard() {
                 Manage live tracking and student pickup status from one screen.
               </p>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/account"
+                className="btn btn-soft text-xs"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                Account
+              </Link>
             <button
               className={`btn ${tracking ? "btn-red" : "btn-blue"} w-full sm:w-auto`}
               onClick={() => setTracking(!tracking)}
@@ -745,6 +771,7 @@ export default function DriverDashboard() {
                 Complete all route stops before reaching school.
               </p>
             )}
+            </div>
           </header>
 
           <div className="grid gap-4 xl:grid-cols-[1fr_360px]">

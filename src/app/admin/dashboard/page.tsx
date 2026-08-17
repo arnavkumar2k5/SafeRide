@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 import { socket } from "@/lib/socket";
 const StopPickerMap = dynamic(() => import("../components/StopPickerMap"), {
@@ -134,6 +135,7 @@ export default function AdminDashboard() {
   const [studentName, setStudentName] = useState("");
   const [parentName, setParentName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
+  const [parentPassword, setParentPassword] = useState("");
   const [selectedStudentBus, setSelectedStudentBus] = useState("");
   const [selectedStop, setSelectedStop] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
@@ -391,10 +393,11 @@ setRouteLines(
       !studentName ||
       !parentName ||
       !parentEmail ||
+      !parentPassword ||
       !selectedStudentBus ||
       !selectedStop
     ) {
-      alert("Fill all fields");
+      alert("Fill all fields, including parent password for new accounts");
       return;
     }
     try {
@@ -405,6 +408,7 @@ setRouteLines(
           studentName,
           parentName,
           parentEmail,
+          parentPassword,
           busId: selectedStudentBus,
           stopId: selectedStop,
         }),
@@ -420,6 +424,7 @@ setRouteLines(
       setStudentName("");
       setParentName("");
       setParentEmail("");
+      setParentPassword("");
       setSelectedStudentBus("");
       setSelectedStop("");
       alert(json.message);
@@ -784,21 +789,35 @@ setRouteLines(
   return (
     <main className="dashboard-shell">
       <div className="mx-auto grid min-h-screen w-full max-w-[1500px] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[270px_1fr] lg:px-8">
-        <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:block">
-          <BrandLogo subtitle="Fleet operations" />
-          <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
-            {["Overview", "Live Map", "Students", "Fleet", "Attendance"].map(
-              (item) => (
-                <a
-                  key={item}
-                  className="block rounded-lg px-3 py-2 hover:bg-slate-100 first:bg-slate-950 first:text-white"
-                  href={`#${item.toLowerCase().replace(" ", "-")}`}
-                >
-                  {item}
-                </a>
-              ),
-            )}
-          </nav>
+        <aside className="dashboard-sidebar sticky top-4 hidden h-[calc(100vh-2rem)] rounded-lg p-5 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <BrandLogo subtitle="Fleet operations" />
+            <nav className="mt-8 space-y-2 text-sm font-semibold text-slate-600">
+              {["Overview", "Live Map", "Students", "Fleet", "Attendance"].map(
+                (item) => (
+                  <a
+                    key={item}
+                    className="block rounded-lg px-3 py-2 hover:bg-slate-100 first:bg-slate-950 first:text-white"
+                    href={`#${item.toLowerCase().replace(" ", "-")}`}
+                  >
+                    {item}
+                  </a>
+                ),
+              )}
+            </nav>
+          </div>
+          <div className="border-t border-slate-200 pt-4">
+            <Link
+              href="/account"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Account & Profile
+            </Link>
+          </div>
         </aside>
 
         <section className="flex min-w-0 flex-col gap-4">
@@ -817,10 +836,22 @@ setRouteLines(
                 Live fleet visibility, attendance and resource management.
               </p>
             </div>
-            <span className="status-pill bg-green-50 text-green-700">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
-              Realtime monitor
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="status-pill bg-green-50 text-green-700">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                Realtime monitor
+              </span>
+              <Link
+                href="/account"
+                className="btn btn-soft text-xs"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                Account
+              </Link>
+            </div>
           </header>
 
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1207,7 +1238,7 @@ setRouteLines(
                   Create, edit, and assign students to buses and stops.
                 </p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[180px_180px_220px_150px_150px_auto]">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[160px_160px_190px_160px_130px_130px_auto]">
                 <input
                   type="text"
                   placeholder="Student name"
@@ -1228,6 +1259,13 @@ setRouteLines(
                   placeholder="Parent Email"
                   value={parentEmail}
                   onChange={(e) => setParentEmail(e.target.value)}
+                  className="field"
+                />
+                <input
+                  type="password"
+                  placeholder="Parent Password"
+                  value={parentPassword}
+                  onChange={(e) => setParentPassword(e.target.value)}
                   className="field"
                 />
                 <select

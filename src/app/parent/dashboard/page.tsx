@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 import { socket } from "@/lib/socket";
 
@@ -516,6 +517,16 @@ if (schoolRes.ok) {
               }`} />
               Student: {getStudentStatusText(data.student_status, data.bus_trip_status)}
             </span>
+            <Link
+              href="/account"
+              className="btn btn-soft text-xs"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Account
+            </Link>
           </div>
         </header>
 

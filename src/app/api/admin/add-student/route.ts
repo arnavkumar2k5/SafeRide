@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       studentName,
       parentName,
       parentEmail,
+      parentPassword,
       busId,
       stopId,
     } = await req.json();
@@ -63,10 +64,14 @@ export async function POST(req: NextRequest) {
     if (parentResult.rows.length > 0) {
       parentId = parentResult.rows[0].id;
     } else {
-      // Temporary password
-      const tempPassword = Math.random().toString(36).slice(-8);
+      if (!parentPassword) {
+        return NextResponse.json(
+          { error: "Parent password is required for new parent accounts" },
+          { status: 400 }
+        );
+      }
 
-      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      const hashedPassword = await bcrypt.hash(parentPassword, 10);
 
       const newParent = await pool.query(
         `
@@ -97,8 +102,6 @@ export async function POST(req: NextRequest) {
       );
 
       parentId = newParent.rows[0].id;
-
-      // Later you can email tempPassword to the parent
     }
 
     await pool.query(

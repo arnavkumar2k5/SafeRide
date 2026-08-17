@@ -12,5 +12,5 @@ export async function middleware(req: any){
 }
 
 export const config = {
-    matcher: ["/parent/:path*", "/driver/:path*", "/admin/:path*"],
+    matcher: ["/parent/:path*", "/driver/:path*", "/admin/:path*", "/account/:path*"],
 };
