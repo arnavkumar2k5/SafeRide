@@ -1234,7 +1234,7 @@ setRouteLines(
               </div>
             </div>
 
-            <div className="dashboard-card min-w-0 p-5 mt-4">
+            <div className="dashboard-card min-w-0 p-5 mt-4 xl:col-span-2">
               <h2 className="text-lg font-bold">Manage Stops</h2>
 <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
               <table className="ops-table">
