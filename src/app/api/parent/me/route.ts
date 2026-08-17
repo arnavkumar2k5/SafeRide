@@ -59,9 +59,31 @@ WHERE students.parent_id = $1`,
       Number(row.school_lng)
     );
 
+    const stopsResult = await pool.query(
+      `SELECT 
+        id,
+        name,
+        stop_order,
+        ST_Y(location::geometry) AS lat,
+        ST_X(location::geometry) AS lng
+      FROM stops
+      WHERE route_id = $1
+      ORDER BY stop_order`,
+      [row.route_id]
+    );
+
+    const routeStops = stopsResult.rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      stop_order: s.stop_order,
+      lat: Number(s.lat),
+      lng: Number(s.lng),
+    }));
+
     return NextResponse.json({
       ...row,
       route_coordinates: routeCoordinates,
+      route_stops: routeStops,
     });
 
   } catch (error) {

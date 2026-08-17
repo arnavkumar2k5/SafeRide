@@ -45,7 +45,6 @@ export async function getRouteGeometry(routeId: string, schoolLat: number, schoo
     const coordsForORS = [
       [schoolLng, schoolLat],
       ...stops.map(s => [Number(s.lng), Number(s.lat)]),
-      [schoolLng, schoolLat]
     ];
 
     const res = await fetch(
@@ -91,7 +90,6 @@ export async function getRouteGeometry(routeId: string, schoolLat: number, schoo
       const fallback: [number, number][] = [
         [schoolLat, schoolLng],
         ...stops.map((s): [number, number] => [Number(s.lat), Number(s.lng)]),
-        [schoolLat, schoolLng]
       ];
       return fallback;
     } catch (fallbackError) {

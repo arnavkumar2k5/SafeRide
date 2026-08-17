@@ -31,9 +31,17 @@ const schoolIcon = new L.Icon({
 
 const studentStopIcon = new L.Icon({
   iconUrl: "/icons/stop-pending.svg",
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+  popupAnchor: [0, -36],
+});
+
+const regularStopIcon = new L.DivIcon({
+  className: "custom-route-stop-icon",
+  html: `<div style="background-color: #3b82f6; width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.35);"></div>`,
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+  popupAnchor: [0, -10],
 });
 
 const busIcon = new L.Icon({
@@ -42,6 +50,14 @@ const busIcon = new L.Icon({
   iconAnchor: [20, 40],
   popupAnchor: [0, -40],
 });
+
+type RouteStop = {
+  id: string;
+  name: string;
+  stop_order: number;
+  lat: number;
+  lng: number;
+};
 
 type Props = {
   lat: number;
@@ -56,6 +72,7 @@ type Props = {
     longitude: number;
   } | null;
   routeCoordinates?: [number, number][];
+  routeStops?: RouteStop[];
 };
 
 function FitAllMarkers({
@@ -115,6 +132,7 @@ export default function Map({
   stopLng,
   school,
   routeCoordinates,
+  routeStops,
 }: Props) {
   const markerRef = useRef<L.Marker>(null);
   const [fallbackRoute, setFallbackRoute] = useState<[number, number][]>([]);
@@ -172,14 +190,9 @@ export default function Map({
 
   if (safeRoute.length > 0) {
     const busIndex = findNearestIndex(safeRoute, { lat, lng });
-    const stopIndex = (stopLat !== undefined && stopLng !== undefined)
-      ? findNearestIndex(safeRoute, { lat: stopLat, lng: stopLng })
-      : 0;
 
-    const splitIndex = Math.min(busIndex, stopIndex);
-
-    coveredCoordinates = safeRoute.slice(0, splitIndex + 1);
-    remainingCoordinates = safeRoute.slice(splitIndex);
+    coveredCoordinates = safeRoute.slice(0, busIndex + 1);
+    remainingCoordinates = safeRoute.slice(busIndex);
   }
 
   return (
@@ -225,10 +238,68 @@ export default function Map({
         </Popup>
       </Marker>
 
-      {stopLat !== undefined && stopLng !== undefined && (
-        <Marker position={[stopLat, stopLng]} icon={studentStopIcon}>
-          <Popup>Student stop</Popup>
-        </Marker>
+      {/* RENDER ALL ROUTE STOPS */}
+      {Array.isArray(routeStops) && routeStops.length > 0 ? (
+        routeStops.map((stop) => {
+          const isMyChildStop =
+            stopLat !== undefined &&
+            stopLng !== undefined &&
+            Math.abs(stop.lat - stopLat) < 0.0001 &&
+            Math.abs(stop.lng - stopLng) < 0.0001;
+
+          if (isMyChildStop) {
+            return (
+              <Marker
+                key={stop.id || "my-child-stop"}
+                position={[stop.lat, stop.lng]}
+                icon={studentStopIcon}
+              >
+                <Popup>
+                  <div className="text-xs">
+                    <p className="font-bold text-amber-600 uppercase tracking-wide">
+                      Your Child&apos;s Stop
+                    </p>
+                    <p className="font-semibold text-slate-900 mt-0.5">
+                      Stop {stop.stop_order}: {stop.name}
+                    </p>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          }
+
+          return (
+            <Marker
+              key={stop.id}
+              position={[stop.lat, stop.lng]}
+              icon={regularStopIcon}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <p className="font-bold text-slate-500 uppercase tracking-wide">
+                    Route Stop {stop.stop_order}
+                  </p>
+                  <p className="font-semibold text-slate-800 mt-0.5">
+                    {stop.name}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })
+      ) : (
+        stopLat !== undefined &&
+        stopLng !== undefined && (
+          <Marker position={[stopLat, stopLng]} icon={studentStopIcon}>
+            <Popup>
+              <div className="text-xs">
+                <p className="font-bold text-amber-600 uppercase tracking-wide">
+                  Your Child&apos;s Stop
+                </p>
+              </div>
+            </Popup>
+          </Marker>
+        )
       )}
     </MapContainer>
   );

@@ -169,6 +169,72 @@ export default function DriverDashboard() {
     return points;
   }
 
+  function findNearestCoordinateIndex(
+    coords: [number, number][],
+    target: { lat: number; lng: number },
+  ): number {
+    if (coords.length === 0) return 0;
+    let nearestIdx = 0;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < coords.length; i++) {
+      const dLat = coords[i][0] - target.lat;
+      const dLng = coords[i][1] - target.lng;
+      const distSq = dLat * dLat + dLng * dLng;
+      if (distSq < minDistance) {
+        minDistance = distSq;
+        nearestIdx = i;
+      }
+    }
+
+    return nearestIdx;
+  }
+
+  function getRoadFollowingPoints(
+    start: { lat: number; lng: number },
+    end: { lat: number; lng: number },
+    routeCoords: [number, number][],
+  ): { lat: number; lng: number }[] {
+    if (!routeCoords || routeCoords.length <= 1) {
+      return interpolatePoints(start, end, 50);
+    }
+
+    const startIdx = findNearestCoordinateIndex(routeCoords, start);
+    const endIdx = findNearestCoordinateIndex(routeCoords, end);
+
+    let rawSlice: [number, number][] = [];
+    if (startIdx <= endIdx) {
+      rawSlice = routeCoords.slice(startIdx, endIdx + 1);
+    } else {
+      rawSlice = routeCoords.slice(endIdx, startIdx + 1).reverse();
+    }
+
+    if (rawSlice.length <= 1) {
+      return interpolatePoints(start, end, 30);
+    }
+
+    // Densify along the road segment for smooth animation
+    const points: { lat: number; lng: number }[] = [];
+    for (let i = 0; i < rawSlice.length - 1; i++) {
+      const p1 = { lat: rawSlice[i][0], lng: rawSlice[i][1] };
+      const p2 = { lat: rawSlice[i + 1][0], lng: rawSlice[i + 1][1] };
+
+      const subSteps = 3;
+      for (let s = 0; s < subSteps; s++) {
+        const t = s / subSteps;
+        points.push({
+          lat: p1.lat + (p2.lat - p1.lat) * t,
+          lng: p1.lng + (p2.lng - p1.lng) * t,
+        });
+      }
+    }
+
+    const lastPoint = rawSlice[rawSlice.length - 1];
+    points.push({ lat: lastPoint[0], lng: lastPoint[1] });
+
+    return points;
+  }
+
   const pickupStudent = async (attendanceId: string) => {
     await fetch("/api/driver/pickup", {
       method: "POST",
@@ -361,12 +427,16 @@ export default function DriverDashboard() {
       lng: school.longitude,
     };
 
-    // Move the simulated bus between two points.
+    // Move the simulated bus along the road route.
     const moveToPoint = async (
       start: { lat: number; lng: number },
       end: { lat: number; lng: number },
     ) => {
-      const points = interpolatePoints(start, end, 80);
+      const points = getRoadFollowingPoints(start, end, routeCoordinates);
+      const stepDelay = Math.max(
+        60,
+        Math.min(220, Math.round(14000 / Math.max(points.length, 1))),
+      );
 
       for (const point of points) {
         setLocation(point);
@@ -388,7 +458,7 @@ export default function DriverDashboard() {
         }
 
         await new Promise((resolve) =>
-          setTimeout(resolve, 300),
+          setTimeout(resolve, stepDelay),
         );
       }
     };

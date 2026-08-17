@@ -10,6 +10,14 @@ const Map = dynamic(() => import("@/components/Map"), {
   ssr: false,
 });
 
+type RouteStop = {
+  id: string;
+  name: string;
+  stop_order: number;
+  lat: number;
+  lng: number;
+};
+
 type ParentData = {
   student_id: string;
   student_name: string;
@@ -24,6 +32,8 @@ type ParentData = {
   driver_name?: string;
   stop_lat?: number;
   stop_lng?: number;
+  route_coordinates?: [number, number][];
+  route_stops?: RouteStop[];
 };
 
 type BusLocation = {
@@ -36,13 +46,137 @@ type School = {
   longitude: number;
 };
 
-
-
 type BusLocationUpdate = {
   busId: string;
   lat: number;
   lng: number;
+  speed?: number;
 };
+
+function getHaversineDistanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function findNearestCoordIndex(
+  coords: [number, number][],
+  target: { lat: number; lng: number },
+): number {
+  if (!coords || coords.length === 0) return 0;
+  let nearestIdx = 0;
+  let minDistance = Infinity;
+
+  for (let i = 0; i < coords.length; i++) {
+    const dLat = coords[i][0] - target.lat;
+    const dLng = coords[i][1] - target.lng;
+    const distSq = dLat * dLat + dLng * dLng;
+    if (distSq < minDistance) {
+      minDistance = distSq;
+      nearestIdx = i;
+    }
+  }
+
+  return nearestIdx;
+}
+
+function computeLiveEtaAndProximity(
+  busLoc: { lat: number; lng: number },
+  stopLoc: { lat: number; lng: number },
+  routeCoords: [number, number][] | undefined,
+  studentStatus: string | undefined,
+  liveSpeed?: number,
+): {
+  eta: { distance: string; duration: string } | null;
+  isNear: boolean;
+  isArrived: boolean;
+} {
+  if (studentStatus === "dropped") {
+    return { eta: null, isNear: false, isArrived: false };
+  }
+
+  const directMetersToStop = getHaversineDistanceMeters(
+    busLoc.lat,
+    busLoc.lng,
+    stopLoc.lat,
+    stopLoc.lng,
+  );
+
+  if (directMetersToStop <= 50) {
+    return {
+      eta: { distance: "0.00", duration: "0" },
+      isNear: false,
+      isArrived: true,
+    };
+  }
+
+  let totalMeters = 0;
+
+  if (routeCoords && routeCoords.length > 1) {
+    const busIdx = findNearestCoordIndex(routeCoords, busLoc);
+    const stopIdx = findNearestCoordIndex(routeCoords, stopLoc);
+
+    if (busIdx < stopIdx) {
+      for (let i = busIdx; i < stopIdx; i++) {
+        totalMeters += getHaversineDistanceMeters(
+          routeCoords[i][0],
+          routeCoords[i][1],
+          routeCoords[i + 1][0],
+          routeCoords[i + 1][1],
+        );
+      }
+    } else {
+      if (directMetersToStop <= 100) {
+        totalMeters = 0;
+      } else {
+        totalMeters = directMetersToStop;
+      }
+    }
+  } else {
+    totalMeters = directMetersToStop;
+  }
+
+  const isArrived = totalMeters <= 50;
+  const isNear = totalMeters > 50 && totalMeters <= 500;
+
+  if (isArrived) {
+    return {
+      eta: { distance: "0.00", duration: "0" },
+      isNear: false,
+      isArrived: true,
+    };
+  }
+
+  const distanceKm = totalMeters / 1000;
+  const effectiveSpeedKmh =
+    liveSpeed && liveSpeed > 5 && !isNaN(liveSpeed) ? liveSpeed : 30;
+  const durationMinutes = Math.max(
+    1,
+    Math.round((distanceKm / effectiveSpeedKmh) * 60),
+  );
+
+  return {
+    eta: {
+      distance: distanceKm.toFixed(2),
+      duration: durationMinutes.toString(),
+    },
+    isNear,
+    isArrived: false,
+  };
+}
 
 type BusNearStopEvent = {
   stopName: string;
@@ -236,56 +370,33 @@ export default function ParentDashboard() {
             setLocation(null);
           }
 
-          if (locJson && json.stop_lat !== undefined && json.stop_lng !== undefined) {
-            try {
-              const res = await fetch(
-                "https://api.openrouteservice.org/v2/directions/driving-car",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
-                  },
-                  body: JSON.stringify({
-                    coordinates: [
-                      [locJson.lng, locJson.lat],
-                      [json.stop_lng, json.stop_lat],
-                    ],
-                  }),
-                },
-              );
-
-              const schoolRes = await fetch("/api/admin/school");
-
-if (schoolRes.ok) {
-  const schoolJson = await schoolRes.json();
-  setSchool(schoolJson);
-} else {
-  setSchool(null);
-}
-
-              const routeData = await res.json();
-              const summary = routeData.routes[0].summary;
-
-              setEta({
-                distance: (summary.distance / 1000).toFixed(2),
-                duration: (summary.duration / 60).toFixed(0),
-              });
-
-              const distance = summary.distance;
-              if (distance <= 50) {
-                setBusArrived(true);
-                setBusNear(false);
-              } else if (distance <= 500) {
-                setBusNear(true);
-                setBusArrived(false);
-              } else {
-                setBusArrived(false);
-                setBusNear(false);
-              }
-            } catch (error) {
-              console.error("ETA Error:", error);
+          try {
+            const schoolRes = await fetch("/api/admin/school");
+            if (schoolRes.ok) {
+              const schoolJson = await schoolRes.json();
+              setSchool(schoolJson);
+            } else {
+              setSchool(null);
             }
+          } catch (schoolErr) {
+            console.error("Failed to fetch school info:", schoolErr);
+            setSchool(null);
+          }
+
+          if (
+            locJson &&
+            json.stop_lat !== undefined &&
+            json.stop_lng !== undefined
+          ) {
+            const result = computeLiveEtaAndProximity(
+              locJson,
+              { lat: json.stop_lat, lng: json.stop_lng },
+              json.route_coordinates,
+              json.student_status,
+            );
+            setEta(result.eta);
+            setBusNear(result.isNear);
+            setBusArrived(result.isArrived);
           }
         } else {
           setError("No bus ID found");
@@ -300,89 +411,39 @@ if (schoolRes.ok) {
 
     fetchData();
 
-    socket.on("bus-location-update", async (liveData: BusLocationUpdate) => {
-  console.log("🚌 PARENT RECEIVED BUS LOCATION:", liveData);
+    socket.on("bus-location-update", (liveData: BusLocationUpdate) => {
+      const currentData = dataRef.current;
 
-  const currentData = dataRef.current;
-
-  console.log("👤 PARENT BUS ID:", currentData?.bus_id);
-  console.log("🚌 EVENT BUS ID:", liveData.busId);
-
-  if (!currentData) {
-    console.log("❌ No parent data available yet");
-    return;
-  }
-
-  if (liveData.busId !== currentData.bus_id) {
-    console.log("❌ Bus ID mismatch");
-    return;
-  }
-
-  console.log("✅ Bus ID matched. Updating parent location.");
-
-  setLocation({
-    lat: liveData.lat,
-    lng: liveData.lng,
-  });
-
-  if (
-    currentData.stop_lat !== undefined &&
-    currentData.stop_lng !== undefined
-  ) {
-    try {
-      const res = await fetch(
-        "https://api.openrouteservice.org/v2/directions/driving-car",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: process.env.NEXT_PUBLIC_ORS_API_KEY!,
-          },
-          body: JSON.stringify({
-            coordinates: [
-              [liveData.lng, liveData.lat],
-              [currentData.stop_lng, currentData.stop_lat],
-            ],
-          }),
-        },
-      );
-
-      if (!res.ok) {
-        console.error("❌ ORS request failed:", res.status);
+      if (!currentData) {
         return;
       }
 
-      const routeData = await res.json();
-
-      if (!routeData.routes?.[0]) {
-        console.error("❌ No route returned from ORS");
+      if (liveData.busId !== currentData.bus_id) {
         return;
       }
 
-      const summary = routeData.routes[0].summary;
-
-      setEta({
-        distance: (summary.distance / 1000).toFixed(2),
-        duration: (summary.duration / 60).toFixed(0),
+      setLocation({
+        lat: liveData.lat,
+        lng: liveData.lng,
       });
 
-      const distance = summary.distance;
+      if (
+        currentData.stop_lat !== undefined &&
+        currentData.stop_lng !== undefined
+      ) {
+        const result = computeLiveEtaAndProximity(
+          { lat: liveData.lat, lng: liveData.lng },
+          { lat: currentData.stop_lat, lng: currentData.stop_lng },
+          currentData.route_coordinates,
+          currentData.student_status,
+          liveData.speed,
+        );
 
-      if (distance <= 50) {
-        setBusArrived(true);
-        setBusNear(false);
-      } else if (distance <= 500) {
-        setBusNear(true);
-        setBusArrived(false);
-      } else {
-        setBusArrived(false);
-        setBusNear(false);
+        setEta(result.eta);
+        setBusNear(result.isNear);
+        setBusArrived(result.isArrived);
       }
-    } catch (error) {
-      console.error("❌ ETA error:", error);
-    }
-  }
-});
+    });
 
     socket.on("bus-near-stop", (liveData: BusNearStopEvent & { studentId?: string }) => {
       const currentData = dataRef.current;
@@ -418,6 +479,12 @@ if (schoolRes.ok) {
           name: currentData.student_name,
           status: getStudentStatusText(liveData.status),
         });
+
+        if (liveData.status === "dropped") {
+          setEta(null);
+          setBusNear(false);
+          setBusArrived(false);
+        }
 
         setData((prev) => {
           if (!prev) return null;
@@ -564,6 +631,7 @@ if (schoolRes.ok) {
                   stopLng={data?.stop_lng}
                   school={school}
                   routeCoordinates={(data as any)?.route_coordinates}
+                  routeStops={data?.route_stops}
                 />
               ) : (
                 <div className="flex h-full flex-col items-center justify-center bg-slate-50 text-slate-500 p-6 text-center">

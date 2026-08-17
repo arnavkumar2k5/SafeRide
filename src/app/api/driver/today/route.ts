@@ -19,7 +19,7 @@ export async function GET() {
     // Find driver's bus
     const busResult = await pool.query(
       `
-      SELECT id, school_id, trip_status
+      SELECT id, school_id, route_id, trip_status
       FROM buses
       WHERE driver_id=$1
       `,

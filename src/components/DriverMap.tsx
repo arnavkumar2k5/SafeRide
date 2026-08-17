@@ -86,12 +86,11 @@ export default function DriverMap({
 }: Props) {
   if (!school) return null;
 
-  const polylinePositions: [number, number][] = routeCoordinates && routeCoordinates.length > 0
+  const polylinePositions: [number, number][] = routeCoordinates && routeCoordinates.length > 1
     ? routeCoordinates
     : [
         [school.latitude, school.longitude],
         ...stops.map((stop): [number, number] => [stop.lat, stop.lng]),
-        [school.latitude, school.longitude]
       ] as [number, number][];
 
   return (

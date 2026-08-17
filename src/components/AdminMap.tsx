@@ -2,7 +2,7 @@
 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   MapContainer,
@@ -76,6 +76,7 @@ function FitBounds({
   buses,
   routes,
   school,
+  selectedBus,
 }: {
   buses: Bus[];
   routes: RouteLine[];
@@ -83,10 +84,21 @@ function FitBounds({
     latitude: number;
     longitude: number;
   } | null;
+  selectedBus: string;
 }) {
   const map = useMap();
+  const hasFittedInitialRef = useRef(false);
+  const lastSelectedBusRef = useRef(selectedBus);
 
   useEffect(() => {
+    const isSelectionChanged = lastSelectedBusRef.current !== selectedBus;
+    lastSelectedBusRef.current = selectedBus;
+
+    // Only fit bounds on initial map load or when the selected bus changes deliberately
+    if (hasFittedInitialRef.current && !isSelectionChanged) {
+      return;
+    }
+
     const points: [number, number][] = [];
 
     buses.forEach((bus) => {
@@ -110,8 +122,9 @@ function FitBounds({
       map.fitBounds(points, {
         padding: [50, 50],
       });
+      hasFittedInitialRef.current = true;
     }
-  }, [map, buses, routes, school]);
+  }, [map, selectedBus, routes.length, school, buses.length]);
 
   return null;
 }
@@ -166,6 +179,7 @@ const busesToShow =
       selectedBus === "all" || r.busId === selectedBus
   )}
   school={school}
+  selectedBus={selectedBus}
 />
 
       {busesToShow
