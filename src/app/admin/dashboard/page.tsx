@@ -1088,7 +1088,7 @@ setRouteLines(
               <h2 className="text-lg font-bold text-slate-950">
                 Assign driver
               </h2>
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 space-y-3-">
                 <select
                   value={selectedDriver}
                   onChange={(e) => setSelectedDriver(e.target.value)}
@@ -1234,10 +1234,10 @@ setRouteLines(
               </div>
             </div>
 
-            <div className="dashboard-card p-5 mt-4">
+            <div className="dashboard-card min-w-0 p-5 mt-4">
               <h2 className="text-lg font-bold">Manage Stops</h2>
-
-              <table className="ops-table mt-4">
+<div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+              <table className="ops-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -1332,6 +1332,7 @@ setRouteLines(
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </section>
 
