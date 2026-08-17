@@ -631,6 +631,7 @@ export default function ParentDashboard() {
                   stopLng={data?.stop_lng}
                   school={school}
                   routeCoordinates={(data as any)?.route_coordinates}
+                  returnCoordinates={(data as any)?.return_coordinates}
                   routeStops={data?.route_stops}
                 />
               ) : (

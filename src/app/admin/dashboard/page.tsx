@@ -104,6 +104,7 @@ type RouteMap = {
   routeId: string;
   routeName: string;
   coordinates: [number, number][];
+  returnCoordinates?: [number, number][];
 
   stops: {
     id: string;
@@ -122,6 +123,75 @@ type StopItem = {
   lat: number;
   lng: number;
 };
+
+function getAttendanceStatusLabel(status: string) {
+  switch (status) {
+    case "boarded":
+      return "Boarded";
+    case "arrived_school":
+      return "At School";
+    case "dropped":
+      return "Dropped";
+    case "absent":
+      return "Absent";
+    case "waiting":
+    default:
+      return "Waiting";
+  }
+}
+
+function getAttendanceStatusBadge(status: string) {
+  switch (status) {
+    case "boarded":
+      return (
+        <span className="status-pill bg-blue-50 text-blue-700">Boarded</span>
+      );
+    case "arrived_school":
+      return (
+        <span className="status-pill bg-purple-50 text-purple-700">
+          At School
+        </span>
+      );
+    case "dropped":
+      return (
+        <span className="status-pill bg-green-50 text-green-700">Dropped</span>
+      );
+    case "absent":
+      return (
+        <span className="status-pill bg-red-50 text-red-700">Absent</span>
+      );
+    case "waiting":
+    default:
+      return (
+        <span className="status-pill bg-slate-100 text-slate-600">Waiting</span>
+      );
+  }
+}
+
+function getAttendanceTimestamp(item: {
+  status: string;
+  drop_time?: string | null;
+  pickup_time?: string | null;
+  created_at?: string | null;
+}) {
+  if (item.status === "dropped" && item.drop_time) {
+    return new Date(item.drop_time).toLocaleTimeString();
+  }
+  if (item.status === "boarded" && item.pickup_time) {
+    return new Date(item.pickup_time).toLocaleTimeString();
+  }
+  if (item.status === "arrived_school") {
+    return item.pickup_time
+      ? new Date(item.pickup_time).toLocaleTimeString()
+      : "At School";
+  }
+  if (item.status === "absent") {
+    return item.created_at
+      ? new Date(item.created_at).toLocaleTimeString()
+      : "Absent";
+  }
+  return "—";
+}
 
 export default function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -347,9 +417,40 @@ setRouteLines(
       fetchData();
     });
 
-    socket.on("bus-location-update", () => {
-      fetchData();
-    });
+    socket.on(
+      "bus-location-update",
+      (liveData: { busId: string; lat: number; lng: number }) => {
+        if (
+          !liveData?.busId ||
+          liveData.lat === undefined ||
+          liveData.lng === undefined
+        ) {
+          return;
+        }
+
+        setLiveBuses((prev) => {
+          const index = prev.findIndex((b) => b.bus_id === liveData.busId);
+          if (index === -1) {
+            return [
+              ...prev,
+              {
+                bus_id: liveData.busId,
+                driver_name: "",
+                lat: liveData.lat,
+                lng: liveData.lng,
+              },
+            ];
+          }
+          const updated = [...prev];
+          updated[index] = {
+            ...updated[index],
+            lat: liveData.lat,
+            lng: liveData.lng,
+          };
+          return updated;
+        });
+      },
+    );
 
     return () => {
       socket.off("attendance-update");
@@ -947,22 +1048,28 @@ setRouteLines(
                       className="flex gap-3 border-b border-slate-100 pb-3 last:border-0"
                     >
                       <span
-                        className={`mt-1 h-2.5 w-2.5 rounded-full ${item.status === "boarded" ? "bg-green-500" : "bg-amber-500"}`}
+                        className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                          item.status === "boarded"
+                            ? "bg-blue-500"
+                            : item.status === "arrived_school"
+                              ? "bg-purple-500"
+                              : item.status === "dropped"
+                                ? "bg-green-500"
+                                : item.status === "absent"
+                                  ? "bg-red-500"
+                                  : "bg-slate-400"
+                        }`}
                       />
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-slate-950">
                           {item.student_name}
                         </p>
                         <p className="text-sm text-slate-500">
-                          {item.status === "boarded" ? "Boarded" : "Dropped"} on
-                          bus {item.bus_id}
+                          {getAttendanceStatusLabel(item.status)}
+                          {item.bus_number ? ` on bus ${item.bus_number}` : ""}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {new Date(
-                            item.drop_time ??
-                              item.pickup_time ??
-                              item.created_at,
-                          ).toLocaleString()}
+                          {getAttendanceTimestamp(item)}
                         </p>
                       </div>
                     </div>
@@ -1546,20 +1653,10 @@ setRouteLines(
                   {filteredAttendance.map((item, index) => (
                     <tr key={index}>
                       <td className="font-semibold">{item.student_name}</td>
-                      <td>
-                        <span
-                          className={`status-pill ${item.status === "boarded" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}
-                        >
-                          {item.status === "boarded" ? "Boarded" : "Dropped"}
-                        </span>
-                      </td>
+                      <td>{getAttendanceStatusBadge(item.status)}</td>
                       <td>{item.bus_number}</td>
                       <td>{item.driver_name}</td>
-                      <td>
-                        {new Date(
-                          item.drop_time ?? item.pickup_time ?? item.created_at,
-                        ).toLocaleString()}
-                      </td>
+                      <td>{getAttendanceTimestamp(item)}</td>
                     </tr>
                   ))}
                   {filteredAttendance.length === 0 && (

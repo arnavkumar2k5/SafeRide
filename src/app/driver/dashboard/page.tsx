@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { socket } from "@/lib/socket";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -34,6 +34,7 @@ type School = {
 type Stop = {
   id: string;
   name: string;
+  stop_order: number;
   lat: number;
   lng: number;
 };
@@ -44,6 +45,8 @@ type TodayResponse = {
   students: Student[];
   trip_status: TripStatus;
   routeCoordinates?: [number, number][];
+  returnCoordinates?: [number, number][];
+  routeLegs?: [number, number][][];
 };
 
 const DriverMap = dynamic(() => import("@/components/DriverMap"), {
@@ -62,7 +65,83 @@ export default function DriverDashboard() {
   const [completedStops, setCompletedStops] = useState<string[]>([]);
   const [tripStatus, setTripStatus] = useState<TripStatus | null>(null);
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
+  const [returnCoordinates, setReturnCoordinates] = useState<[number, number][]>([]);
+  const [routeLegs, setRouteLegs] =
+  useState<[number, number][][]>([]);
+  const [activeWaitingStop, setActiveWaitingStop] = useState<Stop | null>(null);
   // const [arrivedAtSchool, setArrivedAtSchool] = useState(false);
+
+  const distanceStats = useMemo(() => {
+    const pickupMeters = getPolylineDistanceMeters(routeCoordinates);
+    const returnMeters = getPolylineDistanceMeters(returnCoordinates);
+    const totalMeters = pickupMeters + returnMeters;
+
+    if (totalMeters === 0) {
+      return { coveredKm: "0.0", remainingKm: "0.0", totalKm: "0.0" };
+    }
+
+    if (tripStatus === "completed") {
+      return {
+        coveredKm: (totalMeters / 1000).toFixed(1),
+        remainingKm: "0.0",
+        totalKm: (totalMeters / 1000).toFixed(1),
+      };
+    }
+
+    if (!location) {
+      return {
+        coveredKm: "0.0",
+        remainingKm: (totalMeters / 1000).toFixed(1),
+        totalKm: (totalMeters / 1000).toFixed(1),
+      };
+    }
+
+    if (routeCoordinates.length > 0) {
+      const busIndex = findNearestCoordinateIndex(routeCoordinates, location);
+      const pickupDistSq =
+        Math.pow(routeCoordinates[busIndex][0] - location.lat, 2) +
+        Math.pow(routeCoordinates[busIndex][1] - location.lng, 2);
+
+      let isOnReturn = false;
+      let returnBusIndex = 0;
+
+      if (returnCoordinates && returnCoordinates.length > 0) {
+        returnBusIndex = findNearestCoordinateIndex(returnCoordinates, location);
+        const returnDistSq =
+          Math.pow(returnCoordinates[returnBusIndex][0] - location.lat, 2) +
+          Math.pow(returnCoordinates[returnBusIndex][1] - location.lng, 2);
+
+        if (returnDistSq < pickupDistSq && busIndex >= routeCoordinates.length - 2) {
+          isOnReturn = true;
+        }
+      }
+
+      let coveredMeters = 0;
+      if (isOnReturn) {
+        coveredMeters =
+          pickupMeters +
+          getPolylineDistanceMeters(returnCoordinates.slice(0, returnBusIndex + 1));
+      } else {
+        coveredMeters = getPolylineDistanceMeters(
+          routeCoordinates.slice(0, busIndex + 1),
+        );
+      }
+
+      const remainingMeters = Math.max(0, totalMeters - coveredMeters);
+
+      return {
+        coveredKm: (coveredMeters / 1000).toFixed(1),
+        remainingKm: (remainingMeters / 1000).toFixed(1),
+        totalKm: (totalMeters / 1000).toFixed(1),
+      };
+    }
+
+    return {
+      coveredKm: "0.0",
+      remainingKm: (totalMeters / 1000).toFixed(1),
+      totalKm: (totalMeters / 1000).toFixed(1),
+    };
+  }, [routeCoordinates, returnCoordinates, location, tripStatus]);
 
   const fetchStudents = async () => {
     try {
@@ -71,6 +150,8 @@ export default function DriverDashboard() {
       setStudents(data.students);
       setTripStatus(data.trip_status);
       setRouteCoordinates(data.routeCoordinates || []);
+      setReturnCoordinates(data.returnCoordinates || []);
+      setRouteLegs(data.routeLegs || []);
       const progressRes = await fetch("/api/driver/stop-progress");
       const progressData = await progressRes.json();
 
@@ -98,7 +179,12 @@ export default function DriverDashboard() {
       try {
         const res = await fetch("/api/driver/stops");
         const data = await res.json();
-        setStops(Array.isArray(data) ? data : []);
+        const sorted = Array.isArray(data)
+          ? [...data].sort(
+              (a, b) => (Number(a.stop_order) || 0) - (Number(b.stop_order) || 0),
+            )
+          : [];
+        setStops(sorted);
       } catch (error) {
         console.error(error);
       }
@@ -190,63 +276,118 @@ export default function DriverDashboard() {
     return nearestIdx;
   }
 
-  function getRoadFollowingPoints(
-    start: { lat: number; lng: number },
-    end: { lat: number; lng: number },
-    routeCoords: [number, number][],
-  ): { lat: number; lng: number }[] {
-    if (!routeCoords || routeCoords.length <= 1) {
-      return interpolatePoints(start, end, 50);
-    }
-
-    const startIdx = findNearestCoordinateIndex(routeCoords, start);
-    const endIdx = findNearestCoordinateIndex(routeCoords, end);
-
-    let rawSlice: [number, number][] = [];
-    if (startIdx <= endIdx) {
-      rawSlice = routeCoords.slice(startIdx, endIdx + 1);
-    } else {
-      rawSlice = routeCoords.slice(endIdx, startIdx + 1).reverse();
-    }
-
-    if (rawSlice.length <= 1) {
-      return interpolatePoints(start, end, 30);
-    }
-
-    // Densify along the road segment for smooth animation
-    const points: { lat: number; lng: number }[] = [];
-    for (let i = 0; i < rawSlice.length - 1; i++) {
-      const p1 = { lat: rawSlice[i][0], lng: rawSlice[i][1] };
-      const p2 = { lat: rawSlice[i + 1][0], lng: rawSlice[i + 1][1] };
-
-      const subSteps = 3;
-      for (let s = 0; s < subSteps; s++) {
-        const t = s / subSteps;
-        points.push({
-          lat: p1.lat + (p2.lat - p1.lat) * t,
-          lng: p1.lng + (p2.lng - p1.lng) * t,
-        });
-      }
-    }
-
-    const lastPoint = rawSlice[rawSlice.length - 1];
-    points.push({ lat: lastPoint[0], lng: lastPoint[1] });
-
-    return points;
+  function getHaversineDistanceMeters(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   }
 
-  const pickupStudent = async (attendanceId: string) => {
-    await fetch("/api/driver/pickup", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        attendanceId,
-      }),
-    });
+  function getPolylineDistanceMeters(coords: [number, number][]): number {
+    if (!coords || coords.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < coords.length - 1; i++) {
+      total += getHaversineDistanceMeters(
+        coords[i][0],
+        coords[i][1],
+        coords[i + 1][0],
+        coords[i + 1][1],
+      );
+    }
+    return total;
+  }
 
-    fetchStudents();
+  function getRoadFollowingPoints(
+  start: { lat: number; lng: number },
+  end: { lat: number; lng: number },
+  routeCoords: [number, number][],
+): { lat: number; lng: number }[] {
+  if (!routeCoords || routeCoords.length <= 1) {
+    return interpolatePoints(start, end, 50);
+  }
+
+  const startIdx = findNearestCoordinateIndex(routeCoords, start);
+  const endIdx = findNearestCoordinateIndex(routeCoords, end);
+
+  if (startIdx === endIdx) {
+    return interpolatePoints(start, end, 30);
+  }
+
+  const rawSlice =
+    startIdx < endIdx
+      ? routeCoords.slice(startIdx, endIdx + 1)
+      : routeCoords.slice(endIdx, startIdx + 1).reverse();
+
+  const points: { lat: number; lng: number }[] = [];
+
+  for (let i = 0; i < rawSlice.length - 1; i++) {
+    const p1 = {
+      lat: rawSlice[i][0],
+      lng: rawSlice[i][1],
+    };
+
+    const p2 = {
+      lat: rawSlice[i + 1][0],
+      lng: rawSlice[i + 1][1],
+    };
+
+    const subSteps = 3;
+
+    for (let s = 0; s < subSteps; s++) {
+      const t = s / subSteps;
+
+      points.push({
+        lat: p1.lat + (p2.lat - p1.lat) * t,
+        lng: p1.lng + (p2.lng - p1.lng) * t,
+      });
+    }
+  }
+
+  const last = rawSlice[rawSlice.length - 1];
+
+  points.push({
+    lat: last[0],
+    lng: last[1],
+  });
+
+  return points;
+}
+
+  const pickupStudent = async (attendanceId: string) => {
+    try {
+      const res = await fetch("/api/driver/pickup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          attendanceId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to pickup student.");
+        return;
+      }
+
+      await fetchStudents();
+    } catch (error) {
+      console.error("Failed to pickup student:", error);
+      alert("Something went wrong while marking student picked up.");
+    }
   };
 
   const markAbsent = async (attendanceId: string) => {
@@ -317,17 +458,28 @@ export default function DriverDashboard() {
   // };
 
   const dropStudent = async (attendanceId: string) => {
-    await fetch("/api/driver/drop", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        attendanceId,
-      }),
-    });
-    
-    fetchStudents();
+    try {
+      const res = await fetch("/api/driver/drop", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          attendanceId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to drop student.");
+        return;
+      }
+
+      await fetchStudents();
+    } catch (error) {
+      console.error("Failed to drop student:", error);
+      alert("Something went wrong while marking student dropped.");
+    }
   };
   
   const isNearStop = (
@@ -417,9 +569,11 @@ export default function DriverDashboard() {
   setSimulationRunning(true);
 
   try {
-    // If the trip is idle, start pickup automatically.
-    if (tripStatus === "idle") {
+    // If the trip is idle or completed, start pickup automatically.
+    if (tripStatus === "idle" || tripStatus === "completed") {
       await updateTripStatus("pickup");
+      setCompletedStops([]);
+      await fetchStudents();
     }
 
     const schoolPoint = {
@@ -431,8 +585,12 @@ export default function DriverDashboard() {
     const moveToPoint = async (
       start: { lat: number; lng: number },
       end: { lat: number; lng: number },
+      customRoadCoords?: [number, number][],
     ) => {
-      const points = getRoadFollowingPoints(start, end, routeCoordinates);
+      const activeCoords = customRoadCoords && customRoadCoords.length > 1
+        ? customRoadCoords
+        : routeCoordinates;
+      const points = getRoadFollowingPoints(start, end, activeCoords);
       const stepDelay = Math.max(
         60,
         Math.min(220, Math.round(14000 / Math.max(points.length, 1))),
@@ -498,7 +656,7 @@ export default function DriverDashboard() {
 
         // Stay at the stop until driver handles everyone.
         await new Promise((resolve) =>
-          setTimeout(resolve, 1000),
+          setTimeout(resolve, 600),
         );
       }
     };
@@ -568,7 +726,7 @@ export default function DriverDashboard() {
         }
 
         await new Promise((resolve) =>
-          setTimeout(resolve, 1000),
+          setTimeout(resolve, 600),
         );
       }
     };
@@ -577,53 +735,90 @@ export default function DriverDashboard() {
     // PICKUP ROUTE
     // =====================================================
 
+    // Ensure stops strictly follow database stop_order
+    const sortedPickupStops = [...stops].sort(
+      (a, b) => (Number(a.stop_order) || 0) - (Number(b.stop_order) || 0),
+    );
+
+    sortedPickupStops.forEach((s, idx) => {
+      console.log(
+        `[SIMULATION] Pickup stop ${idx + 1}: ${s.name} (stop_order = ${s.stop_order}, lat = ${s.lat}, lng = ${s.lng})`,
+      );
+    });
+
     let previousPoint = schoolPoint;
 
-    for (const stop of stops) {
-      // Move to pickup stop.
-      await moveToPoint(previousPoint, {
-        lat: stop.lat,
-        lng: stop.lng,
-      });
+    for (let idx = 0; idx < sortedPickupStops.length; idx++) {
+  const stop = sortedPickupStops[idx];
 
-      // STOP and wait for Pickup / Absent.
-      await waitForPickupStop(stop.id);
+  console.log(
+    `[SIMULATION] ▶ Moving toward Pickup stop ${idx + 1}: ${stop.name}`,
+  );
 
-      // Save completed pickup stop.
-      try {
-        await fetch("/api/driver/stop-progress", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            stopId: stop.id,
-          }),
-        });
+  const leg = routeLegs[idx];
 
-        setCompletedStops((prev) =>
-          prev.includes(stop.id)
-            ? prev
-            : [...prev, stop.id],
-        );
-      } catch (error) {
-        console.error(
-          "Failed to save stop progress:",
-          error,
-        );
-      }
+  await moveToPoint(
+    previousPoint,
+    {
+      lat: stop.lat,
+      lng: stop.lng,
+    },
+    leg,
+  );
 
-      previousPoint = {
-        lat: stop.lat,
-        lng: stop.lng,
-      };
-    }
+  setLocation({
+    lat: stop.lat,
+    lng: stop.lng,
+  });
+
+  setActiveWaitingStop(stop);
+
+  console.log(
+    `[SIMULATION] 🛑 Bus STOPPED at ${stop.name}`,
+  );
+
+  await waitForPickupStop(stop.id);
+
+  console.log(
+    `[SIMULATION] ✔ Decision recorded for ${stop.name}. Resuming route.`,
+  );
+
+  setActiveWaitingStop(null);
+
+  try {
+    await fetch("/api/driver/stop-progress", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        stopId: stop.id,
+      }),
+    });
+
+    setCompletedStops((prev) =>
+      prev.includes(stop.id)
+        ? prev
+        : [...prev, stop.id],
+    );
+  } catch (error) {
+    console.error(
+      "Failed to save stop progress:",
+      error,
+    );
+  }
+
+  previousPoint = {
+    lat: stop.lat,
+    lng: stop.lng,
+  };
+}
 
     // =====================================================
-    // RETURN TO SCHOOL
+    // RETURN TO SCHOOL (Direct shortest road route)
     // =====================================================
 
-    await moveToPoint(previousPoint, schoolPoint);
+    await moveToPoint(previousPoint, schoolPoint, returnCoordinates);
 
     setLocation(schoolPoint);
 
@@ -666,8 +861,13 @@ export default function DriverDashboard() {
         lng: stop.lng,
       });
 
-      // STOP and wait for driver to click Drop.
+      setLocation({ lat: stop.lat, lng: stop.lng });
+      setActiveWaitingStop(stop);
+
+      // STOP and wait for driver to click Drop for all students at this stop.
       await waitForDropStop(stop.id);
+
+      setActiveWaitingStop(null);
 
       previousPoint = {
         lat: stop.lat,
@@ -676,10 +876,10 @@ export default function DriverDashboard() {
     }
 
     // =====================================================
-    // RETURN TO SCHOOL AFTER DROP
+    // RETURN TO SCHOOL AFTER DROP (Direct shortest road route)
     // =====================================================
 
-    await moveToPoint(previousPoint, schoolPoint);
+    await moveToPoint(previousPoint, schoolPoint, returnCoordinates);
 
     setLocation(schoolPoint);
 
@@ -777,12 +977,12 @@ export default function DriverDashboard() {
 >
   {simulationRunning ? "Simulation Running..." : "Start Simulation"}
 </button>
-            {tripStatus === "idle" && (
+            {(tripStatus === "idle" || tripStatus === "completed") && (
               <button
                 className="btn btn-green"
                 onClick={() => updateTripStatus("pickup")}
               >
-                Start Pickup
+                {tripStatus === "completed" ? "Start New Trip" : "Start Pickup"}
               </button>
             )}
 
@@ -846,7 +1046,7 @@ export default function DriverDashboard() {
 
           <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
             <section id="route" className="dashboard-card overflow-hidden">
-              <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">
                     Assigned route
@@ -855,43 +1055,76 @@ export default function DriverDashboard() {
                     School origin, planned stops, and live driver position.
                   </p>
                 </div>
-                <span
-  className={`status-pill ${
-    tripStatus === "pickup"
-      ? "bg-blue-50 text-blue-700"
-      : tripStatus === "at_school"
-        ? "bg-green-50 text-green-700"
-        : tripStatus === "drop"
-          ? "bg-orange-50 text-orange-700"
-          : tripStatus === "completed"
-            ? "bg-green-50 text-green-700"
-            : "bg-slate-100 text-slate-600"
-  }`}
->
-  <span
-    className={`h-2 w-2 rounded-full ${
-      tripStatus === "pickup"
-        ? "bg-blue-500"
-        : tripStatus === "at_school"
-          ? "bg-green-500"
-          : tripStatus === "drop"
-            ? "bg-orange-500"
-            : tripStatus === "completed"
-              ? "bg-green-500"
-              : "bg-slate-400"
-    }`}
-  />
 
-  {tripStatus === "pickup"
-    ? "Pickup"
-    : tripStatus === "at_school"
-      ? "At School"
-      : tripStatus === "drop"
-        ? "Drop"
-        : tripStatus === "completed"
-          ? "Completed"
-          : "Idle"}
-</span>
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Road Distance Stats */}
+                  <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-center">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Distance Covered
+                      </p>
+                      <p className="text-sm font-extrabold text-emerald-600">
+                        {distanceStats.coveredKm} km
+                      </p>
+                    </div>
+                    <div className="h-6 w-px bg-slate-200" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Remaining
+                      </p>
+                      <p className="text-sm font-extrabold text-rose-500">
+                        {distanceStats.remainingKm} km
+                      </p>
+                    </div>
+                    <div className="h-6 w-px bg-slate-200" />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Total
+                      </p>
+                      <p className="text-sm font-extrabold text-slate-900">
+                        {distanceStats.totalKm} km
+                      </p>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`status-pill ${
+                      tripStatus === "pickup"
+                        ? "bg-blue-50 text-blue-700"
+                        : tripStatus === "at_school"
+                          ? "bg-green-50 text-green-700"
+                          : tripStatus === "drop"
+                            ? "bg-orange-50 text-orange-700"
+                            : tripStatus === "completed"
+                              ? "bg-green-50 text-green-700"
+                              : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${
+                        tripStatus === "pickup"
+                          ? "bg-blue-500"
+                          : tripStatus === "at_school"
+                            ? "bg-green-500"
+                            : tripStatus === "drop"
+                              ? "bg-orange-500"
+                              : tripStatus === "completed"
+                                ? "bg-green-500"
+                                : "bg-slate-400"
+                      }`}
+                    />
+
+                    {tripStatus === "pickup"
+                      ? "Pickup"
+                      : tripStatus === "at_school"
+                        ? "At School"
+                        : tripStatus === "drop"
+                          ? "Drop"
+                          : tripStatus === "completed"
+                            ? "Completed"
+                            : "Idle"}
+                  </span>
+                </div>
               </div>
               <div className="map-shell h-[430px] sm:h-[560px]">
                 <DriverMap
@@ -902,6 +1135,7 @@ export default function DriverDashboard() {
                   dropCompletedStops={dropCompletedStops}
                   tripStatus={tripStatus ?? "idle"}
                   routeCoordinates={routeCoordinates}
+                  returnCoordinates={returnCoordinates}
                 />
               </div>
             </section>
@@ -987,6 +1221,29 @@ export default function DriverDashboard() {
           </div>
 
           <section id="students" className="dashboard-card p-5">
+            {activeWaitingStop && (
+              <div className="mb-5 rounded-xl border-2 border-amber-500 bg-amber-50 p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500 text-lg font-bold text-white animate-pulse">
+                    🛑
+                  </span>
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-wider text-amber-800">
+                      BUS STOPPED — ACTION REQUIRED
+                    </p>
+                    <h4 className="text-base font-bold text-slate-900">
+                      {tripStatus === "drop"
+                        ? `Arrived at ${activeWaitingStop.name} — Please drop student(s)`
+                        : `Arrived at ${activeWaitingStop.name} — Please mark Pickup or Absent`}
+                    </h4>
+                    <p className="text-xs text-slate-600">
+                      The bus is paused at this stop. Complete student attendance below to continue simulation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">

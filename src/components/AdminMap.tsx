@@ -2,7 +2,7 @@
 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 
 import {
   MapContainer,
@@ -51,6 +51,7 @@ type RouteLine = {
   busNumber: string;
   routeName: string;
   coordinates: [number, number][];
+  returnCoordinates?: [number, number][];
   stops: {
     name: string;
     stopOrder: number;
@@ -221,29 +222,41 @@ const busesToShow =
         ))}
 
         {safeRoutes
-  .filter(
-    (route) =>
-      selectedBus === "all" || route.busId === selectedBus
-  )
-  .map((route, index) => (
-    <Polyline
-      key={route.busId}
-      positions={route.coordinates}
-      color={
-        [
-          "red",
-          "blue",
-          "green",
-          "purple",
-          "orange",
-          "teal",
-          "brown",
-          "pink",
-        ][index % 8]
-      }
-      weight={5}
-    />
-))}
+          .filter(
+            (route) =>
+              selectedBus === "all" || route.busId === selectedBus,
+          )
+          .map((route, index) => (
+            <Fragment key={route.busId}>
+              {/* Pickup Route */}
+              <Polyline
+                positions={route.coordinates}
+                color={
+                  [
+                    "red",
+                    "blue",
+                    "green",
+                    "purple",
+                    "orange",
+                    "teal",
+                    "brown",
+                    "pink",
+                  ][index % 8]
+                }
+                weight={5}
+              />
+
+              {/* Direct Shortest Return to School Route */}
+              {route.returnCoordinates && route.returnCoordinates.length > 1 && (
+                <Polyline
+                  positions={route.returnCoordinates}
+                  color="#6366f1"
+                  weight={4}
+                  dashArray="6, 8"
+                />
+              )}
+            </Fragment>
+          ))}
 {safeRoutes
   .filter(
     (route) =>

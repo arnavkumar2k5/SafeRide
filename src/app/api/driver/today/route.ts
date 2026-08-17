@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import pool, { getRouteGeometry } from "@/lib/db";
+import pool, {
+  getDetailedRouteGeometry,
+  getRouteLegGeometry,
+} from "@/lib/db";
 
 export async function GET() {
   try {
@@ -146,17 +149,61 @@ ta.drop_time
     );
 
     let routeCoordinates: [number, number][] = [];
+let returnCoordinates: [number, number][] = [];
+let routeLegs: [number, number][][] = [];
     if (schoolLocation.rows.length > 0) {
       const schoolLat = Number(schoolLocation.rows[0].latitude);
       const schoolLng = Number(schoolLocation.rows[0].longitude);
-      routeCoordinates = await getRouteGeometry(bus.route_id, schoolLat, schoolLng);
+      const details = await getDetailedRouteGeometry(bus.route_id, schoolLat, schoolLng);
+      routeCoordinates = details.pickupCoordinates;
+      returnCoordinates = details.returnCoordinates;
+
+      const stopsResult = await pool.query(
+  `
+  SELECT
+    id,
+    stop_order,
+    ST_Y(location::geometry) AS lat,
+    ST_X(location::geometry) AS lng
+  FROM stops
+  WHERE route_id = $1
+  ORDER BY stop_order ASC
+  `,
+  [bus.route_id],
+);
+
+const orderedStops = stopsResult.rows;
+
+let previous = {
+  lat: schoolLat,
+  lng: schoolLng,
+};
+
+for (const stop of orderedStops) {
+  const leg = await getRouteLegGeometry(
+    previous.lat,
+    previous.lng,
+    Number(stop.lat),
+    Number(stop.lng),
+    `${bus.route_id}_pickup_${stop.id}`,
+  );
+
+  routeLegs.push(leg);
+
+  previous = {
+    lat: Number(stop.lat),
+    lng: Number(stop.lng),
+  };
+}
     }
 
     return NextResponse.json({
-      students: today.rows,
-      trip_status: bus.trip_status || "idle",
-      routeCoordinates,
-    });
+  students: today.rows,
+  trip_status: bus.trip_status || "idle",
+  routeCoordinates,
+  returnCoordinates,
+  routeLegs,
+});
   } catch (err) {
     console.error(err);
 

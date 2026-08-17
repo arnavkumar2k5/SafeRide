@@ -72,6 +72,7 @@ type Props = {
     longitude: number;
   } | null;
   routeCoordinates?: [number, number][];
+  returnCoordinates?: [number, number][];
   routeStops?: RouteStop[];
 };
 
@@ -101,7 +102,9 @@ function FitAllMarkers({
       bounds.push([school.latitude, school.longitude]);
     }
 
-    map.fitBounds(bounds, { padding: [32, 32] });
+    if (bounds.length > 0) {
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
   }, [lat, lng, stopLat, stopLng, school, map]);
 
   return null;
@@ -125,22 +128,22 @@ function findNearestIndex(coordinates: [number, number][], target: { lat: number
 export default function Map({
   lat,
   lng,
-  busId,
   busNumber,
   driverName,
   stopLat,
   stopLng,
   school,
   routeCoordinates,
+  returnCoordinates,
   routeStops,
 }: Props) {
-  const markerRef = useRef<L.Marker>(null);
+  const markerRef = useRef<any>(null);
   const [fallbackRoute, setFallbackRoute] = useState<[number, number][]>([]);
 
   // Fallback to dynamic ORS fetch ONLY if backend routeCoordinates are unavailable
   useEffect(() => {
     if (routeCoordinates && routeCoordinates.length > 0) return;
-    if (stopLat === undefined || stopLng === undefined) return;
+    if (!lat || !lng || !stopLat || !stopLng) return;
 
     const fetchRoute = async () => {
       try {
@@ -184,15 +187,45 @@ export default function Map({
   }, [lat, lng]);
 
   const safeRoute = routeCoordinates && routeCoordinates.length > 0 ? routeCoordinates : [];
+  const safeReturn = returnCoordinates && returnCoordinates.length > 0 ? returnCoordinates : [];
 
   let coveredCoordinates: [number, number][] = [];
   let remainingCoordinates: [number, number][] = [];
+  let coveredReturn: [number, number][] = [];
+  let remainingReturn: [number, number][] = [];
 
   if (safeRoute.length > 0) {
     const busIndex = findNearestIndex(safeRoute, { lat, lng });
+    const pickupDistSq =
+      Math.pow(safeRoute[busIndex][0] - lat, 2) +
+      Math.pow(safeRoute[busIndex][1] - lng, 2);
 
-    coveredCoordinates = safeRoute.slice(0, busIndex + 1);
-    remainingCoordinates = safeRoute.slice(busIndex);
+    let isOnReturn = false;
+    let returnBusIndex = 0;
+
+    if (safeReturn.length > 0) {
+      returnBusIndex = findNearestIndex(safeReturn, { lat, lng });
+      const returnDistSq =
+        Math.pow(safeReturn[returnBusIndex][0] - lat, 2) +
+        Math.pow(safeReturn[returnBusIndex][1] - lng, 2);
+
+      // If closer to return route and past the end of the pickup route
+      if (returnDistSq < pickupDistSq && busIndex >= safeRoute.length - 2) {
+        isOnReturn = true;
+      }
+    }
+
+    if (isOnReturn) {
+      coveredCoordinates = safeRoute;
+      remainingCoordinates = [];
+      coveredReturn = safeReturn.slice(0, returnBusIndex + 1);
+      remainingReturn = safeReturn.slice(returnBusIndex);
+    } else {
+      coveredCoordinates = safeRoute.slice(0, busIndex + 1);
+      remainingCoordinates = safeRoute.slice(busIndex);
+      coveredReturn = [];
+      remainingReturn = safeReturn;
+    }
   }
 
   return (
@@ -218,6 +251,17 @@ export default function Map({
           )}
           {remainingCoordinates.length > 0 && (
             <Polyline positions={remainingCoordinates} color="#2563eb" weight={5} />
+          )}
+          {coveredReturn.length > 0 && (
+            <Polyline positions={coveredReturn} color="#10b981" weight={6} />
+          )}
+          {remainingReturn.length > 0 && (
+            <Polyline
+              positions={remainingReturn}
+              color="#6366f1"
+              weight={4}
+              dashArray="6, 8"
+            />
           )}
         </>
       ) : (

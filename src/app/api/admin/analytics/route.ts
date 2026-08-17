@@ -32,14 +32,25 @@ export async function GET() {
 
     const schoolId = admin.rows[0].school_id;
 
-    // TOTAL TRIPS
+    // TOTAL TRIPS: count completed bus runs for this school
     const trips = await pool.query(
       `
-      SELECT COUNT(*)
-FROM trip_history
-JOIN buses
-ON trip_history.bus_id = buses.id
-WHERE buses.school_id = $1
+      SELECT COUNT(DISTINCT (ta.bus_id, ta.trip_date)) AS count
+      FROM trip_attendance ta
+      JOIN buses b ON ta.bus_id = b.id
+      WHERE b.school_id = $1
+        AND (
+          b.trip_status = 'completed'
+          OR (
+            ta.status = 'dropped'
+            AND NOT EXISTS (
+              SELECT 1 FROM trip_attendance ta2
+              WHERE ta2.bus_id = ta.bus_id
+                AND ta2.trip_date = ta.trip_date
+                AND ta2.status IN ('waiting', 'boarded', 'arrived_school')
+            )
+          )
+        )
       `,
       [schoolId]
     );

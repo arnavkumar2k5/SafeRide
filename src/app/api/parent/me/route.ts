@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../auth/[...nextauth]/route";
-import pool, { getRouteGeometry } from "@/lib/db";
+import pool, { getDetailedRouteGeometry } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -53,7 +53,7 @@ WHERE students.parent_id = $1`,
     }
 
     const row = result.rows[0];
-    const routeCoordinates = await getRouteGeometry(
+    const details = await getDetailedRouteGeometry(
       row.route_id,
       Number(row.school_lat),
       Number(row.school_lng)
@@ -82,7 +82,8 @@ WHERE students.parent_id = $1`,
 
     return NextResponse.json({
       ...row,
-      route_coordinates: routeCoordinates,
+      route_coordinates: details.pickupCoordinates,
+      return_coordinates: details.returnCoordinates,
       route_stops: routeStops,
     });
 

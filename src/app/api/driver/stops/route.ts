@@ -60,15 +60,16 @@ export async function GET() {
     const stops =
       await pool.query(
         `
-        SELECT DISTINCT
-    stops.id,
-    stops.name,
-    ST_Y(stops.location::geometry) AS lat,
-    ST_X(stops.location::geometry) AS lng
-FROM students
-JOIN stops
-ON students.stop_id = stops.id
-WHERE students.bus_id = $1;
+        SELECT
+          stops.id,
+          stops.name,
+          stops.stop_order,
+          ST_Y(stops.location::geometry) AS lat,
+          ST_X(stops.location::geometry) AS lng
+        FROM stops
+        JOIN buses ON stops.route_id = buses.route_id
+        WHERE buses.id = $1
+        ORDER BY stops.stop_order ASC;
         `,
         [busId]
       );

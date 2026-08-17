@@ -43,10 +43,29 @@ export async function POST(req: Request) {
       [status, driverId]
     );
 
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: "Bus not assigned" },
-        { status: 404 }
+    const busId = result.rows[0].id;
+
+    // When starting a new trip run (pickup), reset today's demo attendance and stop progress
+    if (status === "pickup") {
+      await pool.query(
+        `
+        UPDATE trip_attendance
+        SET status = 'waiting',
+            pickup_time = NULL,
+            drop_time = NULL
+        WHERE bus_id = $1
+          AND trip_date = CURRENT_DATE
+        `,
+        [busId]
+      );
+
+      await pool.query(
+        `
+        DELETE FROM trip_stop_progress
+        WHERE bus_id = $1
+          AND trip_date = CURRENT_DATE
+        `,
+        [busId]
       );
     }
 
